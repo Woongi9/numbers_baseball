@@ -124,11 +124,11 @@ src/main/resources/application.yml
 
 > 위→아래 순서. 각 단계 끝 "확인"으로 검증. 🔴=필수, 🟡=여유 되면.
 
-### 🔴 STEP 1. Spring Boot 전환 (30분)
-- [ ] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
-- [ ] 의존성: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `jackson-module-kotlin`, `com.h2database:h2`, `spring-boot-starter-test`
-- [ ] `application` 플러그인 / `Main.kt` 제거
-- [ ] **확인**: `./gradlew build` 성공
+### 🔴 STEP 1. Spring Boot 전환 (30분) ✅ 완료
+- [x] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
+- [x] 의존성: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `jackson-module-kotlin`, `com.h2database:h2`, `spring-boot-starter-test`
+- [x] `application` 플러그인 / `Main.kt` 제거
+- [ ] **확인**: `./gradlew build` 성공 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
 
 ### 🔴 STEP 2. 부트스트랩 + DB (15분)
 - [ ] `BaseballApplication.kt` (`@SpringBootApplication`)
