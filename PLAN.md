@@ -149,7 +149,7 @@ src/main/resources/application.yml
 ### 🔴 STEP 5. 스킬 컨트롤러 (30분) ✅ 완료
 - [x] `SkillRequest`/`SkillResponse` DTO
 - [x] `SkillController` `POST /skill/play`: utterance → 명령어/숫자 분기 → 응답
-- [ ] **확인** *(로컬에서 bootRun 후 실행 필요)*:
+- [x] **확인** *(로컬에서 bootRun 후 실행 필요)*:
   ```bash
   curl -X POST localhost:8080/skill/play -H "Content-Type: application/json" \
     -d '{"userRequest":{"utterance":"1234","user":{"id":"u1"}}}'
