@@ -16,10 +16,13 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // Swagger UI (OpenAPI 3). Spring Boot 3.x는 springfox 대신 springdoc 사용.
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     runtimeOnly("com.h2database:h2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("io.mockk:mockk:1.13.13")
     testImplementation(kotlin("test"))
 }
 
@@ -28,6 +31,11 @@ tasks.test {
 }
 kotlin {
     jvmToolchain(21)
+}
+
+// 배포 시 파일명을 고정해 스크립트를 단순화 (build/libs/baseball.jar)
+tasks.bootJar {
+    archiveFileName.set("baseball.jar")
 }
 
 // -P profile=dev 로 넘기지 않으면 local. 빈 문자열도 local 처리.

@@ -1,0 +1,16 @@
+# 테스트 전용 설정. 실제 ./data/baseball 파일을 건드리지 않도록 인메모리 H2 사용.
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop   # 테스트마다 깨끗한 스키마
+    show-sql: false
+
+# 테스트에선 API 문서 비활성
+springdoc:
+  api-docs:
+    enabled: false

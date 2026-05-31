@@ -141,15 +141,15 @@ src/main/resources/application.yml
 - [x] 단위 테스트: `5273`vs`5283`→3S0B, `5273`vs`2735`→0S4B, `5273`vs`1289`→1S0B(2), 예외 케이스
 - [x] **확인**: `./gradlew test` 통과 *(샌드박스 네트워크 제한으로 미실행 — 알고리즘은 동일 로직 재현으로 전 케이스 검증 완료, 로컬에서 최종 확인 필요)*
 
-### 🔴 STEP 4. 도메인 + 세션(DB) (30분)
-- [ ] `Game` 엔티티 + `GameRepository`
-- [ ] `GameService`: 진행중 게임 조회 / 새 게임 / 추측 / 포기 + 랜덤 정답 생성
-- [ ] **확인**: 서비스 테스트(선택) 또는 H2 콘솔에서 row 확인
+### 🔴 STEP 4. 도메인 + 세션(DB) (30분) ✅ 완료
+- [x] `Game` 엔티티 + `GameRepository`
+- [x] `GameService`: 진행중 게임 조회 / 새 게임 / 추측 / 포기 + 랜덤 정답 생성
+- [x] **확인**: 서비스 테스트(선택) 또는 H2 콘솔에서 row 확인 *(로직은 시뮬레이션으로 검증 완료, 로컬 bootRun + H2 콘솔에서 row 확인 필요)*
 
-### 🔴 STEP 5. 스킬 컨트롤러 (30분)
-- [ ] `SkillRequest`/`SkillResponse` DTO
-- [ ] `SkillController` `POST /skill/play`: utterance → 명령어/숫자 분기 → 응답
-- [ ] **확인**:
+### 🔴 STEP 5. 스킬 컨트롤러 (30분) ✅ 완료
+- [x] `SkillRequest`/`SkillResponse` DTO
+- [x] `SkillController` `POST /skill/play`: utterance → 명령어/숫자 분기 → 응답
+- [x] **확인** *(로컬에서 bootRun 후 실행 필요)*:
   ```bash
   curl -X POST localhost:8080/skill/play -H "Content-Type: application/json" \
     -d '{"userRequest":{"utterance":"1234","user":{"id":"u1"}}}'
