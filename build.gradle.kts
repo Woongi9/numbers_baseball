@@ -29,3 +29,15 @@ tasks.test {
 kotlin {
     jvmToolchain(21)
 }
+
+// -P profile=dev 로 넘기지 않으면 local. 빈 문자열도 local 처리.
+val profile = (project.findProperty("profile") as String?)?.takeIf { it.isNotBlank() } ?: "local"
+
+sourceSets {
+    main {
+        resources {
+            srcDirs("src/main/resources", "src/main/resources-env/$profile")
+        }
+    }
+}
+
