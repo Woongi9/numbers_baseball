@@ -1,0 +1,16 @@
+[Unit]
+Description=Numbers Baseball Chatbot (Spring Boot)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+# H2 파일 DB(data/)가 WorkingDirectory 기준으로 생성된다.
+ExecStart=/usr/bin/java -Xmx512m -jar /home/ubuntu/baseball.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
