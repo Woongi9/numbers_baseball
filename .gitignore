@@ -44,7 +44,10 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-**/src/main/**/resources/local
-**/src/main/**/resources/main
+**/src/main/resources-env/
 
 .idea/
+# H2 file DB
+/data/
+*.mv.db
+*.trace.db

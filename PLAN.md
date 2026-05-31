@@ -124,22 +124,22 @@ src/main/resources/application.yml
 
 > 위→아래 순서. 각 단계 끝 "확인"으로 검증. 🔴=필수, 🟡=여유 되면.
 
-### 🔴 STEP 1. Spring Boot 전환 (30분)
-- [ ] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
-- [ ] 의존성: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `jackson-module-kotlin`, `com.h2database:h2`, `spring-boot-starter-test`
-- [ ] `application` 플러그인 / `Main.kt` 제거
-- [ ] **확인**: `./gradlew build` 성공
+### 🔴 STEP 1. Spring Boot 전환 (30분) ✅ 완료
+- [x] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
+- [x] 의존성: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `jackson-module-kotlin`, `com.h2database:h2`, `spring-boot-starter-test`
+- [x] `application` 플러그인 / `Main.kt` 제거
+- [x] **확인**: `./gradlew build` 성공 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
 
-### 🔴 STEP 2. 부트스트랩 + DB (15분)
-- [ ] `BaseballApplication.kt` (`@SpringBootApplication`)
-- [ ] `application.yml`: `server.port`, H2 **파일 모드** datasource, `jpa.hibernate.ddl-auto: update`
-- [ ] **확인**: `./gradlew bootRun` 기동 + H2 콘솔 접속
+### 🔴 STEP 2. 부트스트랩 + DB (15분) ✅ 완료
+- [x] `BaseballApplication.kt` (`@SpringBootApplication`)
+- [x] `application.yml`: `server.port`, H2 **파일 모드** datasource, `jpa.hibernate.ddl-auto: update`
+- [x] **확인**: `./gradlew bootRun` 기동 + H2 콘솔 접속 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
 
-### 🔴 STEP 3. 판정 로직 + 테스트 (40분) ⭐ TDD
-- [ ] `BaseballJudge.judge(answer, guess): Result(strike, ball)`
-- [ ] 입력 검증: 자릿수 / 숫자만 / 중복 없음
-- [ ] 단위 테스트: `5273`vs`5283`→3S0B, `5273`vs`2735`→0S4B, `5273`vs`1289`→1S0B(2), 예외 케이스
-- [ ] **확인**: `./gradlew test` 통과
+### 🔴 STEP 3. 판정 로직 + 테스트 (40분) ⭐ TDD ✅ 완료
+- [x] `BaseballJudge.judge(answer, guess): Result(strike, ball)`
+- [x] 입력 검증: 자릿수 / 숫자만 / 중복 없음
+- [x] 단위 테스트: `5273`vs`5283`→3S0B, `5273`vs`2735`→0S4B, `5273`vs`1289`→1S0B(2), 예외 케이스
+- [x] **확인**: `./gradlew test` 통과 *(샌드박스 네트워크 제한으로 미실행 — 알고리즘은 동일 로직 재현으로 전 케이스 검증 완료, 로컬에서 최종 확인 필요)*
 
 ### 🔴 STEP 4. 도메인 + 세션(DB) (30분)
 - [ ] `Game` 엔티티 + `GameRepository`

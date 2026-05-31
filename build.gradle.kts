@@ -1,5 +1,9 @@
 plugins {
     kotlin("jvm") version "2.1.10"
+    kotlin("plugin.spring") version "2.1.10"
+    kotlin("plugin.jpa") version "2.1.10"
+    id("org.springframework.boot") version "3.4.2"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "org.example"
@@ -10,6 +14,12 @@ repositories {
 }
 
 dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    runtimeOnly("com.h2database:h2")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation(kotlin("test"))
 }
 
@@ -19,3 +29,15 @@ tasks.test {
 kotlin {
     jvmToolchain(21)
 }
+
+// -P profile=dev 로 넘기지 않으면 local. 빈 문자열도 local 처리.
+val profile = (project.findProperty("profile") as String?)?.takeIf { it.isNotBlank() } ?: "local"
+
+sourceSets {
+    main {
+        resources {
+            srcDirs("src/main/resources", "src/main/resources-env/$profile")
+        }
+    }
+}
+
