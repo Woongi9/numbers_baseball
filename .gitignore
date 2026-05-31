@@ -48,3 +48,7 @@ bin/
 **/src/main/**/resources/main
 
 .idea/
+# H2 file DB
+/data/
+*.mv.db
+*.trace.db
