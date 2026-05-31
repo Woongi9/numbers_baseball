@@ -44,7 +44,7 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-**/src/main/**/resources-env/
+**/src/main/resources-env/
 
 .idea/
 # H2 file DB
