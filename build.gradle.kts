@@ -33,6 +33,11 @@ kotlin {
     jvmToolchain(21)
 }
 
+// 배포 시 파일명을 고정해 스크립트를 단순화 (build/libs/baseball.jar)
+tasks.bootJar {
+    archiveFileName.set("baseball.jar")
+}
+
 // -P profile=dev 로 넘기지 않으면 local. 빈 문자열도 local 처리.
 val profile = (project.findProperty("profile") as String?)?.takeIf { it.isNotBlank() } ?: "local"
 
