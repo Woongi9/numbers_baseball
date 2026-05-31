@@ -7,9 +7,8 @@ package com.example.baseball.service
 data class JudgeResult(
     val strike: Int,
     val ball: Int,
-    val digits: Int = strike + ball, // 호출부 호환용 기본값(테스트에선 strike+ball로 충분)
+    val isWin: Boolean,
 ) {
-    val isWin: Boolean get() = strike == digits
     val isOut: Boolean get() = strike == 0 && ball == 0
 }
 
@@ -37,7 +36,7 @@ object BaseballJudge {
                 // 둘 다 아니면 아웃 → 카운트 없음
             }
         }
-        return JudgeResult(strike = strike, ball = ball, digits = strike + ball)
+        return JudgeResult(strike = strike, ball = ball, isWin = strike == answer.length)
     }
 
     private fun validate(answer: String, guess: String) {

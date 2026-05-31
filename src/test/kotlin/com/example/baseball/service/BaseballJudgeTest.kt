@@ -19,7 +19,7 @@ class BaseballJudgeTest {
         fun strike() {
             // 5273 vs 5283 -> 5,2,3 자리 일치(3S), 8은 정답에 없음(0B)
             val result = BaseballJudge.judge("5273", "5283")
-            assertEquals(JudgeResult(strike = 3, ball = 0), result)
+            assertEquals(JudgeResult(strike = 3, ball = 0, isWin = false), result)
         }
 
         @Test
@@ -27,7 +27,7 @@ class BaseballJudgeTest {
         fun ball() {
             // 5273 vs 2735 -> 같은 자리 없음, 네 숫자 모두 포함(0S 4B)
             val result = BaseballJudge.judge("5273", "2735")
-            assertEquals(JudgeResult(strike = 0, ball = 4), result)
+            assertEquals(JudgeResult(strike = 0, ball = 4, isWin = false), result)
         }
 
         @Test
@@ -35,14 +35,14 @@ class BaseballJudgeTest {
         fun strikeNotCountedAsBall() {
             // 5273 vs 1289 -> 2만 자리 일치(1S), 나머지 1,8,9 미포함(0B)
             val result = BaseballJudge.judge("5273", "1289")
-            assertEquals(JudgeResult(strike = 1, ball = 0), result)
+            assertEquals(JudgeResult(strike = 1, ball = 0, isWin = false), result)
         }
 
         @Test
         @DisplayName("모두 틀리면 아웃(0S 0B)")
         fun out() {
             val result = BaseballJudge.judge("5273", "1489")
-            assertEquals(JudgeResult(strike = 0, ball = 0), result)
+            assertEquals(JudgeResult(strike = 0, ball = 0, isWin = false), result)
             assertTrue(result.isOut)
         }
 
@@ -50,7 +50,7 @@ class BaseballJudgeTest {
         @DisplayName("완전히 일치하면 승리(4S)")
         fun homeRun() {
             val result = BaseballJudge.judge("5273", "5273")
-            assertEquals(JudgeResult(strike = 4, ball = 0), result)
+            assertEquals(JudgeResult(strike = 4, ball = 0, isWin = true), result)
             assertTrue(result.isWin)
             assertFalse(result.isOut)
         }
@@ -59,8 +59,8 @@ class BaseballJudgeTest {
         @DisplayName("3자리 게임도 동일하게 판정한다")
         fun threeDigits() {
             val result = BaseballJudge.judge("123", "321")
-            assertEquals(JudgeResult(strike = 1, ball = 2), result) // 2만 자리 일치
-            assertTrue(result.isWin == false)
+            assertEquals(JudgeResult(strike = 1, ball = 2, isWin = false), result) // 2만 자리 일치
+            assertFalse(result.isWin)
         }
     }
 
