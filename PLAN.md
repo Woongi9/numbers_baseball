@@ -155,11 +155,21 @@ src/main/resources/application.yml
     -d '{"userRequest":{"utterance":"1234","user":{"id":"u1"}}}'
   ```
 
-### 🔴 STEP 6. 실배포 (HTTPS) (60~90분) — 가장 큰 변수
-- [ ] 클라우드 인스턴스 준비 (예: 가벼운 VM / 무료 등급)
-- [ ] 빌드 산출물 배포: `./gradlew bootJar` → 서버에서 `java -jar`
-- [ ] **HTTPS**: 도메인 연결 + 리버스 프록시(Nginx) + Let's Encrypt, 또는 HTTPS 기본 제공 플랫폼 사용
-- [ ] **확인**: `https://내도메인/skill/play` curl 성공 (200 + 응답 JSON)
+### 🔴 STEP 6. 실배포 (HTTPS) — Oracle Cloud Always Free (가장 큰 변수)
+
+> 배포 방식: **OCI 무료 ARM VM + Nginx + Let's Encrypt**. 상세 명령은 [DEPLOY.md](DEPLOY.md) 참고.
+
+- [x] 1. OCI 가입 (홈 리전 → 춘천/서울 선택, 변경 불가!)
+- [x] 2. ARM(A1) 인스턴스 생성 (Ubuntu, public IP)
+- [x] 3. 포트 80/443 개방 ← Security List + iptables 둘 다 (최대 함정)
+- [x] 4. SSH 접속 + Java 21 설치
+- [ ] 5. `./gradlew bootJar` → scp 로 업로드
+- [ ] 6. systemd 등록 (상시 가동 + 자동 재시작)
+- [ ] 7. 도메인 (무료: DuckDNS)
+- [ ] 8. Nginx + Certbot → HTTPS 자동 발급
+- [ ] 9. `curl https` 로 외부 동작 확인
+- [ ] 10. 카카오 스킬 URL 등록 *(STEP 7과 연결)*
+- [ ] 11. 재배포는 `deploy/redeploy.sh`
 
 > 💡 **시간 단축 팁**: 도메인/SSL 직접 구축이 부담되면, HTTPS를 기본 제공하는 PaaS(컨테이너 배포형)를 쓰면 STEP 6을 크게 줄일 수 있습니다. 이게 오늘의 최대 리스크라 여기에 시간을 몰아주세요.
 
