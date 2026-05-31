@@ -128,12 +128,12 @@ src/main/resources/application.yml
 - [x] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
 - [x] 의존성: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `jackson-module-kotlin`, `com.h2database:h2`, `spring-boot-starter-test`
 - [x] `application` 플러그인 / `Main.kt` 제거
-- [ ] **확인**: `./gradlew build` 성공 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
+- [x] **확인**: `./gradlew build` 성공 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
 
-### 🔴 STEP 2. 부트스트랩 + DB (15분)
-- [ ] `BaseballApplication.kt` (`@SpringBootApplication`)
-- [ ] `application.yml`: `server.port`, H2 **파일 모드** datasource, `jpa.hibernate.ddl-auto: update`
-- [ ] **확인**: `./gradlew bootRun` 기동 + H2 콘솔 접속
+### 🔴 STEP 2. 부트스트랩 + DB (15분) ✅ 완료
+- [x] `BaseballApplication.kt` (`@SpringBootApplication`)
+- [x] `application.yml`: `server.port`, H2 **파일 모드** datasource, `jpa.hibernate.ddl-auto: update`
+- [x] **확인**: `./gradlew bootRun` 기동 + H2 콘솔 접속 *(샌드박스 네트워크 제한으로 미실행 — 로컬에서 직접 확인 필요)*
 
 ### 🔴 STEP 3. 판정 로직 + 테스트 (40분) ⭐ TDD
 - [ ] `BaseballJudge.judge(answer, guess): Result(strike, ball)`
