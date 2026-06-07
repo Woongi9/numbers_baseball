@@ -1,4 +1,4 @@
-package com.example.baseball.domain
+package com.example.baseball.domain.game
 
 import org.springframework.data.jpa.repository.JpaRepository
 

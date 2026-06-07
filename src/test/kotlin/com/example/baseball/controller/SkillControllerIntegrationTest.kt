@@ -1,7 +1,7 @@
 package com.example.baseball.controller
 
-import com.example.baseball.domain.GameRepository
-import com.example.baseball.domain.GameStatus
+import com.example.baseball.domain.game.GameRepository
+import com.example.baseball.domain.game.GameStatus
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test

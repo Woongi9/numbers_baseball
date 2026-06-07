@@ -1,4 +1,4 @@
-package com.example.baseball.domain
+package com.example.baseball.domain.game
 
 enum class GameStatus {
     PLAYING,  // 진행 중

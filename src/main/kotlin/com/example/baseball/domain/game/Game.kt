@@ -1,4 +1,4 @@
-package com.example.baseball.domain
+package com.example.baseball.domain.game
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -25,7 +25,7 @@ import java.time.LocalDateTime
 )
 class Game(
     @Column(nullable = false)
-    val userId: String,
+    val userId: Long,
 
     @Column(nullable = false)
     val answer: String,

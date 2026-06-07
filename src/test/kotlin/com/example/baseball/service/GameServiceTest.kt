@@ -1,8 +1,8 @@
 package com.example.baseball.service
 
-import com.example.baseball.domain.Game
-import com.example.baseball.domain.GameRepository
-import com.example.baseball.domain.GameStatus
+import com.example.baseball.domain.game.Game
+import com.example.baseball.domain.game.GameRepository
+import com.example.baseball.domain.game.GameStatus
 import io.mockk.CapturingSlot
 import io.mockk.every
 import io.mockk.mockk
