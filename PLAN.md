@@ -1,6 +1,7 @@
 # 숫자야구 카카오톡 챗봇 기획 문서
 
-> **목표(내일까지): 기본+부가기능 게임을 H2(DB)에 저장하고, 클라우드에 HTTPS 실배포 → 오픈빌더 연동 완료**
+> **1차 목표(완료): 게임을 H2(DB)에 저장 + 클라우드 HTTPS 실배포 + 오픈빌더 연동** ✅
+> **2차 목표(고도화 — 진행): 게임/랭킹 두 갈래로 확장 (난이도 모드 · MMR · 채팅방 랭킹)**
 > 기술: Kotlin + Spring Boot + JPA / H2(개발) → MySQL(운영 선택) / 클라우드 배포
 
 ---
@@ -39,75 +40,193 @@
 
 ---
 
-## 2. 게임 규칙 (기본 + 부가기능)
+## 2. 서비스 구조 (게임 / 랭킹 두 갈래)
 
-### 기본
-- 정답: 0~9 중 **서로 다른 숫자 4자리** (예: `5273`) — 국룰
-- **스트라이크(S)**: 숫자+자리 일치 / **볼(B)**: 숫자만 일치 / **아웃**: `0S 0B`
-- `4S`이면 종료 + 시도 횟수 안내
+> 고도화 후 사용자가 만나는 전체 기능 트리.
 
-### 부가기능 (🟡 여유 되면)
-| 기능 | 설명 |
-|------|------|
-| 시도 제한 | 예: 10회 초과 시 실패 처리 + 정답 공개 |
-| 힌트 | 첫 자리 또는 포함 숫자 1개 공개 (힌트당 패널티) |
-| 자릿수 선택 | 3자리/4자리/5자리 선택 (`난이도` 명령어) — 기본 4자리 |
-| 전적/랭킹 | 승률, 평균 시도 횟수, 최소 시도 랭킹 (DB 집계) |
+```
+숫자야구 챗봇
+├── 게임
+│   ├── 시작
+│   │   ├── 보통 모드            (숫자 4자리 — 기본/국룰)
+│   │   └── 어려움 모드          (숫자+알파벳) ......... 🟡 추후 추가
+│   └── 번호 입력
+│       ├── 결과 응답           (ex. "1S 2B", "OUT")
+│       └── 정답 시            (정답 + 획득 MMR + 현재 MMR 응답)
+└── 랭킹 조회
+    ├── 현재 채팅방 내 랭킹
+    └── 전체 서비스 내 랭킹 ............................ 🟡 추후 추가
+```
 
-### 명령어
-- `시작`·`새게임` → 새 정답 / `포기` → 정답 공개 / `전적` → 통계 / 4자리 숫자 → 추측
+### 2-1. 게임 규칙
+
+**보통 모드 (기본 / 국룰)**
+- 정답: 0~9 중 **서로 다른 숫자 4자리** (예: `5273`)
+- **스트라이크(S)**: 숫자+자리 일치 / **볼(B)**: 숫자만 일치 / **아웃(OUT)**: `0S 0B`
+- `4S`이면 승리 → 종료 + 시도 횟수 + **MMR 상승** 안내
+
+**어려움 모드 (🟡 추후 추가)**
+- 정답 구성: **숫자 + 알파벳** 혼합 (예: `A3K7`) — 후보 폭이 넓어 난도↑
+- 판정 규칙(S/B/OUT)은 동일, 대소문자 정규화 필요
+- MMR 보너스 배수 적용 (아래 3-1 참고)
+
+> **설계 메모**: 난이도는 `Game.difficulty` enum(`NORMAL`/`HARD`) 한 컬럼으로 분기. 정답 생성기·입력 검증만 모드별로 달라지고 판정 로직(`BaseballJudge`)은 **문자 집합만 바뀔 뿐 동일** → 순수 함수 재사용. 어려움 모드는 "허용 문자 집합"을 파라미터로 주입하는 식으로 확장하면 코드 중복이 없습니다.
+
+### 2-2. 명령어 (발화 매핑)
+
+| 사용자 발화 | 동작 |
+|------------|------|
+| `시작` · `게임` · `새게임` | 새 게임 시작 (기본=보통 모드) |
+| `어려움` *(추후)* | 어려움 모드로 새 게임 |
+| 4자리 숫자(또는 숫자+알파벳) | 번호 입력 → S/B/OUT 판정 |
+| `포기` | 정답 공개 + 게임 종료(MMR 변동 규칙은 3-1) |
+| `랭킹` · `채팅방랭킹` | 현재 채팅방 내 MMR 랭킹 TOP N |
+| `전체랭킹` *(추후)* | 전체 서비스 MMR 랭킹 TOP N |
+| `전적` *(🟡)* | 내 승률·평균 시도·현재 MMR |
 
 ---
 
-## 3. 아키텍처
+## 3. MMR & 랭킹 설계 (고도화 핵심)
+
+### 3-1. MMR 산정
+
+숫자야구는 상대가 없는 **싱글 플레이**라 PvP ELO가 아니라 **누적 점수형 MMR**로 설계합니다. (승리 시에만 상승, 적은 시도일수록·어려울수록 더 많이 획득)
+
+```
+획득 MMR = max(MIN_GAIN, (BASE - tries * STEP)) * 난이도배수
+현재 MMR += 획득 MMR        // 승리 시에만 적용
+```
+
+| 상수 | 값(제안) | 의미 |
+|------|---------|------|
+| BASE | 100 | 기본 점수 |
+| STEP | 5 | 시도 1회당 차감 |
+| MIN_GAIN | 20 | 많이 틀려도 최소 보장 |
+| 난이도배수 | 보통 1.0 / 어려움 1.5 | 모드별 가중 |
+
+| 상황 | 처리(제안) |
+|------|-----------|
+| 승리 | 위 공식대로 상승 |
+| 포기 | 변동 없음(0) — 또는 소폭 하락(-10) 선택 |
+| 시도제한 실패(🟡) | 변동 없음(0) |
+
+**계산 예시** — 보통 모드, 7번 만에 정답, 현재 MMR 1000:
+```
+획득 = max(20, (100 - 7*5)) * 1.0 = max(20, 65) = 65
+1000 → 1065
+```
+
+**정답 응답 예시**
+```
+🎉 정답! 5273
+7번 만에 맞췄어요.
++65 MMR  (1000 → 1065)
+```
+
+> **왜 이렇게?**: 상수(BASE/STEP/배수)를 코드 상단/설정값으로 빼두면 밸런싱을 배포 없이 조정 가능. 산정식은 `BaseballJudge`와 분리된 **순수 함수(`MmrCalculator.gain(tries, difficulty)`)**로 두어 단위 테스트로 검증(평소 강조하는 테스트 커버리지·코드 품질 지표).
+
+### 3-2. 랭킹 조회
+
+조회는 단순 정렬 쿼리: **채팅방 단위로 MMR 내림차순 TOP N**.
+
+```sql
+-- 현재 채팅방 내 랭킹
+SELECT nickname, mmr FROM player
+WHERE chatroom_id = :chatroomId
+ORDER BY mmr DESC
+LIMIT 10;
+```
+
+| 항목 | 결정 |
+|------|------|
+| 현재 채팅방 랭킹 | `chatroom_id`로 필터 + `mmr DESC` (인덱스 `(chatroom_id, mmr)`) |
+| 전체 랭킹 *(추후)* | `WHERE` 없이 전역 `mmr DESC` |
+| 표시 | 순위·닉네임·MMR TOP 10 + (선택)내 순위 |
+
+> ⚠️ **반드시 먼저 확인할 기술 이슈 — "채팅방 식별자"**
+> 카카오 오픈빌더 일반 채널 챗봇은 기본이 **1:1 대화**라, 스킬 요청 payload에 "단톡방 ID"가 항상 오는지 **검증이 필요**합니다. 요청 본문의 `userRequest.user.id`(botUserKey)는 사용자 식별자이지 채팅방 식별자가 아닐 수 있습니다.
+> - **A안**: 그룹/오픈채팅에서 채팅방 키가 내려오면 그 값을 `chatroom_id`로 사용.
+> - **B안(폴백)**: 채팅방 키가 없으면, 게임 시작 시 사용자가 입력하는 **방 코드(예: `방 만들기` → 코드 발급, `참가 ABCD`)**로 그룹을 식별.
+> 실제 요청 JSON을 한 번 찍어 어떤 식별자가 오는지 확인한 뒤 A/B를 결정하세요. (아래 6번 리스크 표 참고)
+
+---
+
+## 4. 아키텍처
 
 ### 요청 흐름 (순서)
 ```
-1. 사용자가 카톡에서 "123" 입력
+[게임 흐름]
+1. 사용자가 카톡에서 "1234" 입력
 2. 오픈빌더 블록 → 스킬 서버로 POST 호출
-3. 카카오 → POST /skill/play  (JSON: utterance, user.id)
+3. 카카오 → POST /skill/play  (JSON: utterance, user.id, (가능시)채팅방키)
 4. Controller가 JSON 수신
 5. GameService: userId로 진행중 게임 DB 조회
 6. BaseballJudge: 판정(S/B/O) → Game 엔티티 갱신 → DB 저장(JPA)
-7. 카카오 스킬 응답 JSON 생성 (version 2.0 / simpleText)
-8. 반환 → 카카오가 말풍선 렌더링
+7. 정답(4S)이면 → MmrCalculator.gain(tries, difficulty) → Player.mmr += 획득 → 저장
+8. 카카오 스킬 응답 JSON 생성 (version 2.0 / simpleText)
+9. 반환 → 카카오가 말풍선 렌더링
+
+[랭킹 흐름]
+1. 사용자가 "랭킹" 입력 → POST /skill/play
+2. RankingService: chatroom_id로 player TOP N (mmr DESC) 조회
+3. 순위 텍스트 생성 → simpleText 응답
 ```
 
 ### 패키지 구조 (제안)
 ```
 src/main/kotlin/com/example/baseball/
 ├── BaseballApplication.kt
-├── controller/SkillController.kt        # POST /skill/play
+├── controller/SkillController.kt        # POST /skill/play (게임/랭킹 발화 분기)
 ├── service/
 │   ├── GameService.kt                   # 흐름 + 세션(DB) 관리
-│   └── BaseballJudge.kt                 # 순수 판정 로직 (테스트 용이)
+│   ├── RankingService.kt               # 🆕 채팅방/전체 랭킹 조회
+│   ├── BaseballJudge.kt                 # 순수 판정 로직 (테스트 용이)
+│   └── MmrCalculator.kt                # 🆕 순수 MMR 산정 (테스트 용이)
 ├── domain/
-│   ├── Game.kt                          # @Entity: id, userId, answer, tries, status
-│   └── GameRepository.kt                # JpaRepository
+│   ├── Game.kt                          # @Entity: id, userId, answer, digits, difficulty, tries, status, mmrGain
+│   ├── GameRepository.kt                # JpaRepository
+│   ├── Player.kt                       # 🆕 @Entity: userId, chatroomId, nickname, mmr, wins, totalTries
+│   └── PlayerRepository.kt             # 🆕 채팅방 랭킹 조회 쿼리
 └── dto/
     ├── SkillRequest.kt                  # 카카오 → 서버
     └── SkillResponse.kt                 # 서버 → 카카오
 src/main/resources/application.yml
 ```
 
-> **설계 의도**: `BaseballJudge`(판정)를 스프링/카카오/DB와 분리한 **순수 함수**로 두어 단위 테스트로 빠르게 검증. (평소 강조하시는 코드 품질·테스트 커버리지 지표 충족) DB I/O는 `GameService`로 격리.
+> **설계 의도**: 판정(`BaseballJudge`)과 점수산정(`MmrCalculator`)을 스프링/카카오/DB와 분리한 **순수 함수**로 두어 단위 테스트로 빠르게 검증(평소 강조하는 코드 품질·테스트 커버리지 지표 충족). DB I/O는 `GameService`/`RankingService`로 격리. 게임 진행과 랭킹 조회를 별도 서비스로 나눠 **단일 책임**을 지킵니다.
 
 ---
 
-## 4. 데이터 모델
+## 5. 데이터 모델
 
-### Game 엔티티 (핵심 컬럼)
+### Game 엔티티 (한 판의 진행 상태)
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | Long PK | 게임 ID |
 | userId | String (index) | 카카오 user.id |
-| answer | String | 정답 (예: "5273") |
+| answer | String | 정답 (예: "5273", 어려움 "A3K7") |
 | digits | Int | 자릿수 (기본 4) |
+| difficulty | Enum | 🆕 NORMAL / HARD |
 | tries | Int | 시도 횟수 |
 | status | Enum | PLAYING / WON / GIVEUP / FAILED |
+| mmrGain | Int | 🆕 이 판에서 획득한 MMR (승리 시) |
 | createdAt / finishedAt | Timestamp | 통계용 |
 
-> **인덱스 주의**: `userId + status=PLAYING` 조회가 매 요청마다 발생 → `userId` 인덱스 필수. (5초 제한 + 평소 쿼리 최적화 관점)
+### Player 엔티티 🆕 (누적 점수 = 랭킹 대상)
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | Long PK | |
+| userId | String | 카카오 user.id |
+| chatroomId | String (index) | 채팅방 식별자 (3-2 이슈 참고) |
+| nickname | String | 표시용 닉네임 |
+| mmr | Int | 누적 MMR (랭킹 정렬 키) |
+| wins / totalTries | Int | 통계·전적용 |
+| updatedAt | Timestamp | |
+
+> **인덱스 주의**:
+> - `Game`: `userId + status=PLAYING` 조회가 매 요청마다 발생 → `userId` 인덱스 필수.
+> - `Player`: 채팅방 랭킹은 `WHERE chatroom_id = ? ORDER BY mmr DESC` → **복합 인덱스 `(chatroom_id, mmr DESC)`** 로 정렬까지 인덱스로 처리(파일정렬 회피). 사용자 단위 갱신을 위해 `(chatroom_id, user_id)` 유니크도 권장.
+> (5초 제한 + 평소 쿼리 최적화 관점)
 
 ### 카카오 요청/응답 (필요한 필드만)
 ```json
@@ -120,9 +239,9 @@ src/main/resources/application.yml
 
 ---
 
-## 5. 순차 작업 체크리스트
+## 6. 순차 작업 체크리스트
 
-> 위→아래 순서. 각 단계 끝 "확인"으로 검증. 🔴=필수, 🟡=여유 되면.
+> 위→아래 순서. 각 단계 끝 "확인"으로 검증. 🔴=1차 필수, 🟢=고도화(이번), 🟡=추후.
 
 ### 🔴 STEP 1. Spring Boot 전환 (30분) ✅ 완료
 - [x] `build.gradle.kts`: `org.springframework.boot` 3.x + `io.spring.dependency-management` + `kotlin("plugin.spring")` + `kotlin("plugin.jpa")`
@@ -155,47 +274,87 @@ src/main/resources/application.yml
     -d '{"userRequest":{"utterance":"1234","user":{"id":"u1"}}}'
   ```
 
-### 🔴 STEP 6. 실배포 (HTTPS) (60~90분) — 가장 큰 변수
-- [ ] 클라우드 인스턴스 준비 (예: 가벼운 VM / 무료 등급)
-- [ ] 빌드 산출물 배포: `./gradlew bootJar` → 서버에서 `java -jar`
-- [ ] **HTTPS**: 도메인 연결 + 리버스 프록시(Nginx) + Let's Encrypt, 또는 HTTPS 기본 제공 플랫폼 사용
-- [ ] **확인**: `https://내도메인/skill/play` curl 성공 (200 + 응답 JSON)
+### 🔴 STEP 6. 실배포 (HTTPS) — Oracle Cloud Always Free (가장 큰 변수)
+
+> 배포 방식: **OCI 무료 VM + Nginx + acme.sh(DNS-01) + ZeroSSL**. 상세 명령은 [DEPLOY.md](DEPLOY.md) 참고.
+> ✅ **STEP 6 완료 (2026-06-03)**: `https://numbaseball.duckdns.org` HTTPS 실배포 성공. 남은 건 STEP 7(카카오 오픈빌더 연동).
+
+- [x] 1. OCI 가입 (홈 리전 → 춘천/서울 선택, 변경 불가!)
+- [x] 2. ARM(A1) 인스턴스 생성 (Ubuntu, public IP)
+- [x] 3. 포트 80/443 개방 ← Security List + iptables 둘 다 (최대 함정)
+- [x] 4. SSH 접속 + Java 21 설치
+- [x] 5. `./gradlew bootJar` → scp 로 업로드
+- [x] 6. systemd 등록 (상시 가동 + 자동 재시작)
+- [x] 7. 도메인 (무료: DuckDNS)
+- [x] 8. HTTPS 발급 → **acme.sh + DNS-01 + ZeroSSL** *(Certbot http-01은 DuckDNS secondary validation NXDOMAIN, Let's Encrypt DNS-01은 챌린지 404로 실패 → ZeroSSL로 전환해 성공. Nginx 80→443 리다이렉트 + 443 SSL 프록시)*
+- [x] 9. `curl https` 로 외부 동작 확인 — `https://numbaseball.duckdns.org/skill/play` → 정답 JSON 반환 ✅
+- [ ] 10. 카카오 스킬 URL 등록 *(STEP 7과 연결)*
+- [ ] 11. 재배포는 `deploy/redeploy.sh`
 
 > 💡 **시간 단축 팁**: 도메인/SSL 직접 구축이 부담되면, HTTPS를 기본 제공하는 PaaS(컨테이너 배포형)를 쓰면 STEP 6을 크게 줄일 수 있습니다. 이게 오늘의 최대 리스크라 여기에 시간을 몰아주세요.
 
 ### 🔴 STEP 7. 오픈빌더 연동 (40분)
-- [ ] 카카오 비즈니스 채널 + 오픈빌더 봇 생성
-- [ ] 스킬 등록: URL = `https://내도메인/skill/play`
-- [ ] 블록 + 폴백 블록에 스킬 연결
-- [ ] **확인**: 봇 테스트에서 숫자 입력 → 판정 응답
+- [x] 카카오 비즈니스 채널 + 오픈빌더 봇 생성
+- [x] 스킬 등록: URL = `https://내도메인/skill/play`
+- [x] 블록 + 폴백 블록에 스킬 연결
+- [x] **확인**: 봇 테스트에서 숫자 입력 → 판정 응답
 
 ### 🔴 STEP 8. 마무리 점검
 - [ ] 5초 내 응답 / 예외 입력(빈값·자릿수 오류·문자) 처리 / README 작성
 
-### 🟡 STEP 9. 부가기능 (시간 남으면)
-- [ ] 시도 제한 → 힌트 → 자릿수 선택 → 전적/랭킹(DB 집계 쿼리)
+---
 
-### 🟡 STEP 10. 운영 강화 (이후)
+> 아래부터 **고도화(게임/랭킹 두 갈래)** 작업.
+
+### 🟢 STEP 9. [고도화] MMR 시스템
+- [ ] `Game`에 `difficulty`, `mmrGain` 컬럼 추가 (`ddl-auto: update`로 자동 반영 확인)
+- [ ] `Player` 엔티티 + `PlayerRepository` 추가 (userId, chatroomId, nickname, mmr, wins, totalTries)
+- [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 (상수 BASE/STEP/MIN_GAIN/배수)
+- [ ] `GameService`: 정답(4S) 시 MMR 산정 → `Player.mmr` 누적 저장
+- [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기
+- [ ] **단위 테스트**: 시도수별 획득량, 최소 보장(MIN_GAIN), 난이도 배수, 포기 시 변동 없음
+- [ ] **확인**: 정답 맞춘 뒤 MMR 상승 + 응답 텍스트 검증
+
+### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방)
+- [ ] ⚠️ **선행 확인**: 실제 카카오 요청 JSON을 로깅해 **채팅방 식별자 유무** 파악 → A안(채팅방키) / B안(방 코드) 결정
+- [ ] `PlayerRepository`: `findTop10ByChatroomIdOrderByMmrDesc(...)`
+- [ ] 복합 인덱스 `(chatroom_id, mmr)` 추가
+- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기
+- [ ] 랭킹 텍스트 포맷(순위·닉네임·MMR TOP 10)
+- [ ] **확인**: 두 명 이상 플레이 후 `랭킹` → 정렬된 목록 응답
+
+### 🟡 STEP 11. [고도화-추후] 어려움 모드 / 전체 랭킹
+- [ ] 어려움 모드: 허용 문자집합(숫자+알파벳) 주입형 정답 생성·검증, 대소문자 정규화
+- [ ] MMR 난이도 배수(1.5) 적용
+- [ ] `전체랭킹`: `WHERE` 없는 전역 `mmr DESC` 조회
+
+### 🟡 STEP 12. 부가기능 (시간 남으면)
+- [ ] 시도 제한 → 힌트 → 자릿수 선택 → 전적(승률·평균 시도)
+
+### 🟡 STEP 13. 운영 강화 (이후)
 - [ ] H2 → MySQL 전환 / 요청 로깅 + 응답시간 메트릭 / 모니터링·알림
 
 ---
 
-## 6. 리스크 & 주의사항
+## 7. 리스크 & 주의사항
 
 | 리스크 | 영향 | 대응 |
 |--------|------|------|
-| **실배포 HTTPS 구축** | 🔴 가장 큰 시간 소모 | HTTPS 기본 제공 플랫폼 활용 / Nginx+Certbot 사전 숙지 |
-| 5초 타임아웃 | 응답 실패 | DB 조회는 `userId` 인덱스로 경량화, 콜드스타트 주의 |
-| H2 파일 영속성 | 배포 재시작 시 데이터 | 파일 모드 사용, 운영은 MySQL로 전환 |
-| 동시성 | 같은 user 동시 요청 | 게임당 단일 진행 row + 트랜잭션 처리 |
-| 범위 과다 | 미완성 위험 | 🔴만 먼저 끝내고 🟡은 후순위 |
+| **채팅방 식별자 부재** 🆕 | 🟢 채팅방 랭킹 불가 | 실제 요청 JSON 로깅 후 A안(채팅방키)/B안(방 코드) 결정 — STEP 10 선행 |
+| **MMR 밸런싱** 🆕 | 점수 인플레/저평가 | 상수를 설정값으로 분리해 배포 없이 조정, 산정식 단위테스트 |
+| 5초 타임아웃 | 응답 실패 | 랭킹 조회를 `(chatroom_id, mmr)` 인덱스로 경량화, TOP 10 LIMIT |
+| 동시성 🆕 | 같은 user MMR 갱신 충돌 | `Player` 갱신 트랜잭션 + 유니크(chatroom_id, user_id) |
+| H2 파일 영속성 | 재시작 시 데이터 | 파일 모드, 운영은 MySQL 전환 |
+| 범위 과다 | 미완성 위험 | 🟢(MMR→랭킹) 먼저, 🟡(어려움/전체랭킹)은 후순위 |
 
 ---
 
-## 7. 요약
+## 8. 요약
 
-- 현재는 **순수 Kotlin Hello World** → **1번이 Spring Boot+JPA 전환**.
-- 선택 범위(DB+실배포+부가기능)는 하루에 빡빡 → **🔴 필수(배포까지)** 먼저, **🟡 부가기능**은 후순위.
-- 8단계 필수 흐름: 빌드 전환 → 부트스트랩+DB → 판정(TDD) → 세션(DB) → 컨트롤러 → **실배포(HTTPS, 최대 리스크)** → 오픈빌더 → 점검.
-- DB는 **H2 파일 모드로 빠르게 배포 도달** 후 MySQL 전환 권장.
-- 판정 로직을 순수 함수로 분리해 **테스트 커버리지·코드 품질** 확보, `userId` 인덱스로 **5초 제한** 대비.
+- 1차(배포까지)는 완료 ✅ → 이번은 **게임/랭킹 두 갈래 고도화**.
+- **게임**: 보통 모드 + (추후)어려움 모드(숫자+알파벳). 정답 시 **MMR 상승**(`max(MIN_GAIN, BASE - tries*STEP) * 난이도배수`).
+- **랭킹**: 현재 채팅방 내 `mmr DESC` TOP N + (추후)전체 랭킹.
+- 진행 순서: **STEP 9 MMR → STEP 10 채팅방 랭킹 → (추후)STEP 11 어려움/전체랭킹**.
+- 데이터 모델: `Game`에 `difficulty/mmrGain` 추가, **`Player` 엔티티 신설**(랭킹 정렬 키 = `mmr`).
+- ⚠️ 최대 변수는 **채팅방 식별자**: 코드 짜기 전에 실제 카카오 요청 JSON부터 찍어 확인.
+- 판정·MMR을 **순수 함수**로 분리해 테스트 커버리지·코드 품질 확보, **복합 인덱스**로 5초 제한 대비.
