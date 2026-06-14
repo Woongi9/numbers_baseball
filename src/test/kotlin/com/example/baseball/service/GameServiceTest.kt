@@ -21,7 +21,7 @@ class GameServiceTest {
     private val gameRepository = mockk<GameRepository>()
     private val sut = GameService(gameRepository)
 
-    private val userId = "u1"
+    private val botKey = "u1"
 
     /** save(game)가 들어온 엔티티를 그대로 반환하도록 설정 + 캡처 */
     private fun captureSave(): CapturingSlot<Game> {
@@ -31,12 +31,12 @@ class GameServiceTest {
     }
 
     private fun noPlayingGame() {
-        every { gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING) } returns null
+        every { gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING) } returns null
     }
 
     private fun playingGame(answer: String): Game {
-        val game = Game(userId = userId, answer = answer, digits = answer.length)
-        every { gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING) } returns game
+        val game = Game(botKey = botKey, answer = answer, digits = answer.length)
+        every { gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING) } returns game
         return game
     }
 
@@ -50,10 +50,10 @@ class GameServiceTest {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(userId, digits = 4)
+            sut.startGame(botKey, digits = 4)
 
             val saved = slot.captured
-            assertEquals(userId, saved.userId)
+            assertEquals(botKey, saved.botKey)
             assertEquals(4, saved.digits)
             assertEquals(4, saved.answer.length)
             assertEquals(4, saved.answer.toSet().size) // 중복 없음
@@ -68,7 +68,7 @@ class GameServiceTest {
             val existing = playingGame("1234")
             captureSave()
 
-            sut.startGame(userId, digits = 4)
+            sut.startGame(botKey, digits = 4)
 
             assertEquals(GameStatus.GIVEUP, existing.status) // 기존 게임 종료됨
             verify(exactly = 1) { gameRepository.save(any()) }
@@ -78,13 +78,13 @@ class GameServiceTest {
         @DisplayName("허용 범위를 벗어난 자릿수는 예외")
         fun rejectsInvalidDigits() {
             assertThrows(IllegalArgumentException::class.java) {
-                sut.startGame(userId, digits = 2)
+                sut.startGame(botKey, digits = 2)
             }
             assertThrows(IllegalArgumentException::class.java) {
-                sut.startGame(userId, digits = 6)
+                sut.startGame(botKey, digits = 6)
             }
             // 검증 단계에서 막히므로 DB 접근이 없어야 한다
-            verify(exactly = 0) { gameRepository.findFirstByUserIdAndStatus(any(), any()) }
+            verify(exactly = 0) { gameRepository.findFirstByBotKeyAndStatus(any(), any()) }
             verify(exactly = 0) { gameRepository.save(any()) }
         }
     }
@@ -98,7 +98,7 @@ class GameServiceTest {
         fun correctGuessWins() {
             val game = playingGame("5273")
 
-            val outcome = sut.guess(userId, "5273")
+            val outcome = sut.guess(botKey, "5273")
 
             assertTrue(outcome.result.isWin)
             assertTrue(outcome.finished)
@@ -111,7 +111,7 @@ class GameServiceTest {
         fun wrongGuessContinues() {
             val game = playingGame("5273")
 
-            val outcome = sut.guess(userId, "1289") // 1S 0B
+            val outcome = sut.guess(botKey, "1289") // 1S 0B
 
             assertFalse(outcome.result.isWin)
             assertFalse(outcome.finished)
@@ -124,7 +124,7 @@ class GameServiceTest {
         fun noGameThrows() {
             noPlayingGame()
             assertThrows(IllegalStateException::class.java) {
-                sut.guess(userId, "1234")
+                sut.guess(botKey, "1234")
             }
         }
 
@@ -134,7 +134,7 @@ class GameServiceTest {
             val game = playingGame("5273")
 
             assertThrows(IllegalArgumentException::class.java) {
-                sut.guess(userId, "5523") // 중복 숫자
+                sut.guess(botKey, "5523") // 중복 숫자
             }
             assertEquals(0, game.tries) // 검증 실패 → recordTry 도달 X
             assertEquals(GameStatus.PLAYING, game.status)
@@ -150,7 +150,7 @@ class GameServiceTest {
         fun giveUpReturnsAnswer() {
             val game = playingGame("5273")
 
-            val answer = sut.giveUp(userId)
+            val answer = sut.giveUp(botKey)
 
             assertEquals("5273", answer)
             assertEquals(GameStatus.GIVEUP, game.status)
@@ -161,7 +161,7 @@ class GameServiceTest {
         fun noGameThrows() {
             noPlayingGame()
             assertThrows(IllegalStateException::class.java) {
-                sut.giveUp(userId)
+                sut.giveUp(botKey)
             }
         }
     }

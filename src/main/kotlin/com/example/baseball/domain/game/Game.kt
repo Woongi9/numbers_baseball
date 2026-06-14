@@ -25,7 +25,7 @@ import java.time.LocalDateTime
 )
 class Game(
     @Column(nullable = false)
-    val userId: Long,
+    val botKey: String,
 
     @Column(nullable = false)
     val answer: String,

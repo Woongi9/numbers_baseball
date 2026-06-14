@@ -22,14 +22,14 @@ class GameService(
      * "유저당 진행중 게임은 항상 1건" 불변식을 지킨다.
      */
     @Transactional
-    fun startGame(userId: String, digits: Int = DEFAULT_DIGITS): Game {
+    fun startGame(botKey: String, digits: Int = DEFAULT_DIGITS): Game {
         require(digits in MIN_DIGITS..MAX_DIGITS) {
             "자릿수는 $MIN_DIGITS~$MAX_DIGITS 사이여야 합니다."
         }
-        gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING)?.giveUp()
+        gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)?.giveUp()
 
         val answer = generateAnswer(digits)
-        return gameRepository.save(Game(userId = userId, answer = answer, digits = digits))
+        return gameRepository.save(Game(botKey = botKey, answer = answer, digits = digits))
     }
 
     /**
@@ -59,7 +59,7 @@ class GameService(
     }
 
     private fun currentGame(userId: String): Game =
-        gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING)
+        gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
             ?: throw IllegalStateException("진행 중인 게임이 없습니다. '시작'을 입력해 새 게임을 시작하세요.")
 
     /** 서로 다른 숫자 digits자리 정답 생성. (0~9 셔플 후 앞에서 digits개) */
