@@ -1,6 +1,7 @@
 package com.example.baseball.service
 
 import com.example.baseball.domain.game.Game
+import com.example.baseball.domain.game.GameDifficulty
 import com.example.baseball.domain.game.GameRepository
 import com.example.baseball.domain.game.GameStatus
 import org.springframework.stereotype.Service
@@ -22,14 +23,12 @@ class GameService(
      * "유저당 진행중 게임은 항상 1건" 불변식을 지킨다.
      */
     @Transactional
-    fun startGame(botKey: String, digits: Int = DEFAULT_DIGITS): Game {
-        require(digits in MIN_DIGITS..MAX_DIGITS) {
-            "자릿수는 $MIN_DIGITS~$MAX_DIGITS 사이여야 합니다."
-        }
+    fun startGame(botKey: String, gameDifficulty: GameDifficulty = GameDifficulty.NORMAL): Game {
         gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)?.giveUp()
-
-        val answer = generateAnswer(digits)
-        return gameRepository.save(Game(botKey = botKey, answer = answer, digits = digits))
+        val answer = generateAnswer(gameDifficulty)
+        return gameRepository.save(
+            Game(botKey = botKey, answer = answer, gameDifficulty = gameDifficulty)
+        )
     }
 
     /**
@@ -62,13 +61,12 @@ class GameService(
         gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
             ?: throw IllegalStateException("진행 중인 게임이 없습니다. '시작'을 입력해 새 게임을 시작하세요.")
 
-    /** 서로 다른 숫자 digits자리 정답 생성. (0~9 셔플 후 앞에서 digits개) */
-    private fun generateAnswer(digits: Int): String =
-        (0..9).shuffled().take(digits).joinToString("")
+    private fun generateAnswer(gameDifficulty: GameDifficulty): String {
+        return gameDifficulty.symbols.shuffled().take(DIGITS).joinToString("")
+    }
 
     companion object {
-        const val DEFAULT_DIGITS = 4
-        const val MIN_DIGITS = 3
-        const val MAX_DIGITS = 5
+        /** 게임 자릿수는 4자리로 고정. 난이도는 자릿수가 아니라 후보 기호 집합만 늘린다. */
+        const val DIGITS = 4
     }
 }

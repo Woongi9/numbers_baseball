@@ -1,6 +1,7 @@
 package com.example.baseball.service
 
 import com.example.baseball.domain.game.Game
+import com.example.baseball.domain.game.GameDifficulty
 import com.example.baseball.domain.game.GameRepository
 import com.example.baseball.domain.game.GameStatus
 import io.mockk.CapturingSlot
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class GameServiceTest {
@@ -35,7 +38,7 @@ class GameServiceTest {
     }
 
     private fun playingGame(answer: String): Game {
-        val game = Game(botKey = botKey, answer = answer, digits = answer.length)
+        val game = Game(botKey = botKey, answer = answer)
         every { gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING) } returns game
         return game
     }
@@ -44,48 +47,86 @@ class GameServiceTest {
     @DisplayName("startGame")
     inner class StartGame {
 
+        /** 생성된 정답이 난이도 규칙(4자리 · 중복 없음 · 허용 기호만)을 지키는지 검증. */
+        private fun assertValidAnswer(answer: String, difficulty: GameDifficulty) {
+            assertEquals(4, answer.length, "정답은 4자리여야 한다")
+            assertEquals(answer.length, answer.toSet().size, "정답에 중복 기호가 없어야 한다")
+            val allowed = difficulty.symbols.toSet()
+            assertTrue(answer.all { it in allowed }, "정답은 허용 기호만 사용해야 한다: $answer")
+        }
+
         @Test
-        @DisplayName("진행중 게임이 없으면 서로 다른 숫자의 새 게임을 저장한다")
-        fun createsNewGame() {
+        @DisplayName("NORMAL: 0~9 숫자 4자리·score=100·PLAYING 게임을 저장하고 그대로 반환한다")
+        fun createsNormalGame() {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(botKey, digits = 4)
+            val returned = sut.startGame(botKey, GameDifficulty.NORMAL)
 
             val saved = slot.captured
+            assertEquals(returned, saved)                          // 저장한 엔티티를 그대로 반환
             assertEquals(botKey, saved.botKey)
-            assertEquals(4, saved.digits)
             assertEquals(4, saved.answer.length)
-            assertEquals(4, saved.answer.toSet().size) // 중복 없음
-            assertTrue(saved.answer.all { it.isDigit() })
+            assertEquals(GameDifficulty.NORMAL, saved.gameDifficulty)
+            assertEquals(100, saved.score)                         // 100 * 1.0
+            assertEquals(0, saved.tries)
             assertEquals(GameStatus.PLAYING, saved.status)
+            assertNull(saved.finishedAt)
+            assertValidAnswer(saved.answer, GameDifficulty.NORMAL)
+            assertTrue(saved.answer.all { it.isDigit() }, "NORMAL 정답은 전부 숫자")
             verify(exactly = 1) { gameRepository.save(any()) }
         }
 
         @Test
-        @DisplayName("진행중 게임이 있으면 기존 게임을 포기 처리한 뒤 새 게임을 만든다")
+        @DisplayName("HARD: 0~9+a~e 기호 4자리·score=200 게임을 저장한다")
+        fun createsHardGame() {
+            noPlayingGame()
+            val slot = captureSave()
+
+            sut.startGame(botKey, GameDifficulty.HARD)
+
+            val saved = slot.captured
+            assertEquals(GameDifficulty.HARD, saved.gameDifficulty)
+            assertEquals(200, saved.score)                         // 100 * 2.0
+            assertEquals(0, saved.tries)
+            assertEquals(GameStatus.PLAYING, saved.status)
+            assertValidAnswer(saved.answer, GameDifficulty.HARD)
+            val allowed = (('0'..'9') + ('a'..'e')).toSet()        // 허용 집합 명시 검증
+            assertTrue(saved.answer.all { it in allowed })
+            verify(exactly = 1) { gameRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("EASY: 0~5 숫자 4자리·score=50 게임을 저장한다")
+        fun createsEasyGame() {
+            noPlayingGame()
+            val slot = captureSave()
+
+            sut.startGame(botKey, GameDifficulty.EASY)
+
+            val saved = slot.captured
+            assertEquals(GameDifficulty.EASY, saved.gameDifficulty)
+            assertEquals(50, saved.score)                          // 100 * 0.5
+            assertEquals(GameStatus.PLAYING, saved.status)
+            assertValidAnswer(saved.answer, GameDifficulty.EASY)
+            val allowed = ('0'..'5').toSet()
+            assertTrue(saved.answer.all { it in allowed })
+            verify(exactly = 1) { gameRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("진행중 게임이 있으면 기존 게임을 GIVEUP 처리한 뒤 새 게임을 만든다")
         fun abandonsExistingGame() {
             val existing = playingGame("1234")
-            captureSave()
+            val slot = captureSave()
 
-            sut.startGame(botKey, digits = 4)
+            sut.startGame(botKey, GameDifficulty.NORMAL)
 
-            assertEquals(GameStatus.GIVEUP, existing.status) // 기존 게임 종료됨
+            val saved = slot.captured
+            assertEquals(GameStatus.GIVEUP, existing.status)       // 기존 게임 종료
+            assertEquals(GameStatus.PLAYING, saved.status)         // 새 게임은 진행중
+            assertNotEquals(existing, saved)                       // 서로 다른 엔티티
             verify(exactly = 1) { gameRepository.save(any()) }
-        }
-
-        @Test
-        @DisplayName("허용 범위를 벗어난 자릿수는 예외")
-        fun rejectsInvalidDigits() {
-            assertThrows(IllegalArgumentException::class.java) {
-                sut.startGame(botKey, digits = 2)
-            }
-            assertThrows(IllegalArgumentException::class.java) {
-                sut.startGame(botKey, digits = 6)
-            }
-            // 검증 단계에서 막히므로 DB 접근이 없어야 한다
-            verify(exactly = 0) { gameRepository.findFirstByBotKeyAndStatus(any(), any()) }
-            verify(exactly = 0) { gameRepository.save(any()) }
         }
     }
 

@@ -30,8 +30,9 @@ class Game(
     @Column(nullable = false)
     val answer: String,
 
-    @Column(nullable = false)
-    val digits: Int,
+    @Column(name = "game_difficulty", nullable = false)
+    @Enumerated(EnumType.STRING)
+    val gameDifficulty: GameDifficulty = GameDifficulty.NORMAL,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,6 +41,9 @@ class Game(
     @Column(nullable = false)
     var tries: Int = 0
         protected set
+
+    @Column(nullable = false)
+    var score: Int = (100 * gameDifficulty.multiplier()).toInt();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

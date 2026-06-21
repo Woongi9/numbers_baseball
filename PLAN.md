@@ -308,30 +308,43 @@ src/main/resources/application.yml
 
 > 아래부터 **고도화(게임/랭킹 두 갈래)** 작업.
 
-> 📌 **설계 변경 메모 (2026-06-21 실측)**: 실제 구현은 PLAN 초안의 단일 `Player(userId, chatroomId, mmr...)`가 아니라 **`Player`(카카오 앱 계정 · `kakaoAppKey` · `score`, 월초 초기화) + `BotPlayer`(봇/채팅방 단위 · `player` FK · `botKey` · `botUserKey` · `score`)** 2개로 분리됨. 즉 `botKey`=채팅방(채널) 식별자, `botUserKey`=그 안의 사용자 → STEP 10의 "채팅방 식별자" 이슈를 botKey/botUserKey 모델로 해소하는 방향. 점수 명칭도 `mmr` 대신 `score`. 아래 체크리스트는 이 설계 기준으로 갱신.
+> 📌 **설계 변경 메모 (2026-06-21 실측)**: 실제 구현은 PLAN 초안의 단일 `Player(userId, chatroomId, mmr...)`가 아니라 **`User`(카카오 앱 계정 · `appUserId` · `score`, 월초 초기화) + `BotUser`(봇/채팅방 단위 · `user` FK · `botKey` · `botUserKey` · `score`)** 2개로 분리됨(Player→User, BotPlayer→BotUser 리네이밍 완료). 즉 `botKey`=채팅방(채널) 식별자, `botUserKey`=그 안의 사용자 → STEP 10의 "채팅방 식별자" 이슈를 botKey/botUserKey 모델로 해소하는 방향. 점수 명칭도 `mmr` 대신 `score`.
 
-### 🟢 STEP 9. [고도화] MMR(=score) 시스템 🔶 진행 중 (엔티티 골격만)
-- [ ] `Game`에 `difficulty`, `mmrGain` 컬럼 추가 — **미반영** (Game은 여전히 botKey/answer/digits/tries/status만)
-- [x] `Player` 엔티티 + `PlayerRepository` 추가 *(설계 변경: `kakaoAppKey`+`score`. nickname/wins/totalTries 등은 미보유)*
-- [x] 🆕 `BotPlayer` 엔티티 + `BotPlayerRepository`(`findByBotKey`) 추가 — 봇/채팅방 단위 점수 보관
+> 🎚️ **난이도/자릿수 결정 (2026-06-21)**: **자릿수는 4자리로 고정**(`GameService.DIGITS = 4`), 난이도는 자릿수가 아니라 **후보 기호 집합만 확장**. `Game`/`GameService`에서 `digits` 필드·`MIN/MAX_DIGITS` 상수 전부 제거. 난이도는 enum `GameDifficulty(multiplier, symbols)`로 구현:
+>
+> | 난이도 | 기호 집합 | 배수 |
+> |--------|-----------|------|
+> | EASY | `0~5` (6개) | 0.5 |
+> | NORMAL | `0~9` (10개) | 1.0 |
+> | HARD | `0~9` + `a~e` (15개) | 2.0 |
+
+### 🟢 STEP 9. [고도화] 점수(score) 시스템 🔶 진행 중
+- [x] `Game`에 `difficulty` 반영 — `gameDifficulty: GameDifficulty`(@Enumerated STRING) 컬럼 추가 완료
+- [x] `GameDifficulty` enum 구현 (EASY/NORMAL/HARD · `multiplier` · `symbols`)
+- [x] `User` 엔티티 + `UserRepository` 추가 *(`appUserId`+`score`. nickname/wins/totalTries 등은 미보유)*
+- [x] 🆕 `BotUser` 엔티티 + `BotUserRepository`(`findByBotKey`) 추가 — 봇/채팅방 단위 점수 보관
+- [x] `startGame(botKey, gameDifficulty=NORMAL)` — 난이도별 후보로 4자리 정답 생성 + 난이도별 테스트(NORMAL/HARD/EASY score=100/200/50, 기호집합·길이·중복 검증)
 - [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
-- [ ] `GameService`: 정답 시 score 산정 → 누적 저장 — **미연결** (현재 `guess()`는 `game.win()`만 호출, score 갱신 없음)
+- [ ] `GameService`: 정답 시 score 산정 → `User`/`BotUser`에 누적 저장 — **미연결** (현재 `guess()`는 `game.win()`만, score 갱신 없음)
 - [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기 — **미반영** (현재는 "정답입니다! N번 만에…"만)
-- [ ] **단위 테스트**: 시도수별 획득량/최소 보장/난이도 배수/포기 무변동 — **미작성** (테스트는 BaseballJudge·GameService·SkillController 통합만 존재)
+- [ ] **단위 테스트**: 시도수별 획득량/최소 보장/난이도 배수/포기 무변동 — **미작성**
 - [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 검증
 
+> ⚠️ **정리 필요(부채)**: ① `Game.score = (100*multiplier).toInt()`를 **생성 시점에 고정** 중 → PLAN의 `gain = max(MIN_GAIN, BASE - tries*STEP)*배수`(승리 시 계산)로 이전 필요. ② `GameDifficulty`에 `val multiplier`와 `fun multiplier()` 중복. ③ `Game` 인덱스 `columnList="userId,status"`가 없는 컬럼 참조 → `botKey,status`로 수정(DDL 깨짐).
+
 ### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방=botKey) 🔶 진행 중 (조회 골격만)
-- [~] ⚠️ **선행 확인**: 채팅방 식별자 → `botKey`/`botUserKey`로 설계 결정한 것으로 보이나, **실제 카카오 요청 JSON 로깅 검증은 미확인** (DTO는 user.id만 파싱 중)
-- [~] `PlayerService.getScoresByBotKey(botKey)` 구현 — botKey 단위 점수 목록 조회까지는 됨. **단, `ORDER BY score DESC` 정렬·TOP N 없음** / `getScoreByUser()`는 `return null` 스텁
+- [~] ⚠️ **선행 확인**: 채팅방 식별자 → `botKey`(=bot.id)/`botUserKey`(=user.id)/`appUserId`로 설계 결정. **실제 카카오 요청 JSON 로깅 검증은 미확인** (DTO는 user.id만 파싱 중)
+- [~] `UserService.getScoresByBotKey(botKey)` 구현 — botKey 단위 점수 목록 조회까지는 됨. **단, `ORDER BY score DESC` 정렬·TOP N 없음** / `getScoreByUser()`는 `return null` 스텁
 - [ ] 복합 인덱스 `(bot_key, score)` 추가 — 미적용
-- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기 — **미연결** (컨트롤러는 시작/포기/숫자/도움말만 분기, 랭킹 없음)
+- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기 — **미연결**
 - [ ] 랭킹 텍스트 포맷(순위·닉네임·점수 TOP 10) — 미작성
 - [ ] **확인**: 두 명 이상 플레이 후 `랭킹` → 정렬된 목록 응답
 
-### 🟡 STEP 11. [고도화-추후] 어려움 모드 / 전체 랭킹
-- [ ] 어려움 모드: 허용 문자집합(숫자+알파벳) 주입형 정답 생성·검증, 대소문자 정규화
-- [ ] MMR 난이도 배수(1.5) 적용
-- [ ] `전체랭킹`: `WHERE` 없는 전역 `mmr DESC` 조회
+### 🟡 STEP 11. [고도화-추후] 어려움 모드(판정부) / 전체 랭킹
+- [x] 어려움 모드 **정답 생성** — `GameDifficulty.symbols`로 HARD(`a~e`)/EASY 후보 주입 완료
+- [ ] 어려움 모드 **추측/판정** — `SkillController`의 `it.isDigit()` 분기가 `a~e` 입력을 막음 → 허용 문자집합(`difficulty.symbols`) 기준 검증 + **대소문자 정규화**(`A`→`a`)로 변경 필요
+- [ ] 난이도 배수를 점수 산정에 적용 (`MmrCalculator`에서 `* difficulty.multiplier`)
+- [ ] `전체랭킹`: `WHERE` 없는 전역 `score DESC` 조회
 
 ### 🟡 STEP 12. 부가기능 (시간 남으면)
 - [ ] 시도 제한 → 힌트 → 자릿수 선택 → 전적(승률·평균 시도)
