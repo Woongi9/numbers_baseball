@@ -1,7 +1,7 @@
 package com.example.baseball.controller
 
-import com.example.baseball.domain.GameRepository
-import com.example.baseball.domain.GameStatus
+import com.example.baseball.domain.game.GameRepository
+import com.example.baseball.domain.game.GameStatus
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -44,7 +44,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
 
         // 1) 시작
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING)
+        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
         assertNotNull(game) // DB에 진행중 게임 생성됨
 
         // 2) DB의 실제 정답으로 추측 → 승리
@@ -61,7 +61,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startWrongGuess() {
         val userId = "it-user-wrong"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
 
         // 정답과 다른, 규칙에 맞는 추측 하나를 만든다(서로 다른 숫자 4자리)
         val wrong = firstValidGuessDifferentFrom(game.answer)
@@ -77,7 +77,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startGiveUp() {
         val userId = "it-user-giveup"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByUserIdAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
 
         play("포기", userId, game.answer) // 응답에 정답이 포함됨
 

@@ -35,8 +35,8 @@ class SkillController(
         try {
             when {
                 utterance in START_COMMANDS -> {
-                    val game = gameService.startGame(userId)
-                    "새 게임을 시작했습니다. ${game.digits}자리 숫자를 맞혀보세요. (예: 1234)"
+                    gameService.startGame(userId)
+                    "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
                 }
 
                 utterance == GIVEUP_COMMAND -> {

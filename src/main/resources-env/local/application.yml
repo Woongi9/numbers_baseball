@@ -1,0 +1,42 @@
+server:
+  port: 8080
+
+logging:
+  file:
+    name: /home/ubuntu/logs/server.log
+
+spring:
+  profiles:
+    active: local
+  application:
+    name: numbers-baseball
+
+  # H2 파일 모드: 서버 재시작해도 데이터 유지 (./data/baseball.mv.db)
+  datasource:
+    url: jdbc:h2:file:./data/baseball;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # 개발 중 스키마 자동 생성/갱신
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # 브라우저에서 DB 확인: http://localhost:8080/h2-console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Swagger UI: http://localhost:8080/swagger-ui.html
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method   # 메서드(GET/POST 등) 순 정렬
