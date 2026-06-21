@@ -299,28 +299,33 @@ src/main/resources/application.yml
 - [x] 블록 + 폴백 블록에 스킬 연결
 - [x] **확인**: 봇 테스트에서 숫자 입력 → 판정 응답
 
-### 🔴 STEP 8. 마무리 점검
-- [ ] 5초 내 응답 / 예외 입력(빈값·자릿수 오류·문자) 처리 / README 작성
+### 🔴 STEP 8. 마무리 점검 🔶 일부 완료
+- [x] 예외 입력(빈값·자릿수 오류·문자) 처리 — `SkillController.handle()`에서 `IllegalState/IllegalArgument` catch → 안내 메시지로 변환(500 대신 정상 응답)
+- [ ] 5초 내 응답 측정(실측 로깅)
+- [ ] README 작성
 
 ---
 
 > 아래부터 **고도화(게임/랭킹 두 갈래)** 작업.
 
-### 🟢 STEP 9. [고도화] MMR 시스템
-- [ ] `Game`에 `difficulty`, `mmrGain` 컬럼 추가 (`ddl-auto: update`로 자동 반영 확인)
-- [ ] `Player` 엔티티 + `PlayerRepository` 추가 (userId, chatroomId, nickname, mmr, wins, totalTries)
-- [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 (상수 BASE/STEP/MIN_GAIN/배수)
-- [ ] `GameService`: 정답(4S) 시 MMR 산정 → `Player.mmr` 누적 저장
-- [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기
-- [ ] **단위 테스트**: 시도수별 획득량, 최소 보장(MIN_GAIN), 난이도 배수, 포기 시 변동 없음
-- [ ] **확인**: 정답 맞춘 뒤 MMR 상승 + 응답 텍스트 검증
+> 📌 **설계 변경 메모 (2026-06-21 실측)**: 실제 구현은 PLAN 초안의 단일 `Player(userId, chatroomId, mmr...)`가 아니라 **`Player`(카카오 앱 계정 · `kakaoAppKey` · `score`, 월초 초기화) + `BotPlayer`(봇/채팅방 단위 · `player` FK · `botKey` · `botUserKey` · `score`)** 2개로 분리됨. 즉 `botKey`=채팅방(채널) 식별자, `botUserKey`=그 안의 사용자 → STEP 10의 "채팅방 식별자" 이슈를 botKey/botUserKey 모델로 해소하는 방향. 점수 명칭도 `mmr` 대신 `score`. 아래 체크리스트는 이 설계 기준으로 갱신.
 
-### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방)
-- [ ] ⚠️ **선행 확인**: 실제 카카오 요청 JSON을 로깅해 **채팅방 식별자 유무** 파악 → A안(채팅방키) / B안(방 코드) 결정
-- [ ] `PlayerRepository`: `findTop10ByChatroomIdOrderByMmrDesc(...)`
-- [ ] 복합 인덱스 `(chatroom_id, mmr)` 추가
-- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기
-- [ ] 랭킹 텍스트 포맷(순위·닉네임·MMR TOP 10)
+### 🟢 STEP 9. [고도화] MMR(=score) 시스템 🔶 진행 중 (엔티티 골격만)
+- [ ] `Game`에 `difficulty`, `mmrGain` 컬럼 추가 — **미반영** (Game은 여전히 botKey/answer/digits/tries/status만)
+- [x] `Player` 엔티티 + `PlayerRepository` 추가 *(설계 변경: `kakaoAppKey`+`score`. nickname/wins/totalTries 등은 미보유)*
+- [x] 🆕 `BotPlayer` 엔티티 + `BotPlayerRepository`(`findByBotKey`) 추가 — 봇/채팅방 단위 점수 보관
+- [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
+- [ ] `GameService`: 정답 시 score 산정 → 누적 저장 — **미연결** (현재 `guess()`는 `game.win()`만 호출, score 갱신 없음)
+- [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기 — **미반영** (현재는 "정답입니다! N번 만에…"만)
+- [ ] **단위 테스트**: 시도수별 획득량/최소 보장/난이도 배수/포기 무변동 — **미작성** (테스트는 BaseballJudge·GameService·SkillController 통합만 존재)
+- [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 검증
+
+### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방=botKey) 🔶 진행 중 (조회 골격만)
+- [~] ⚠️ **선행 확인**: 채팅방 식별자 → `botKey`/`botUserKey`로 설계 결정한 것으로 보이나, **실제 카카오 요청 JSON 로깅 검증은 미확인** (DTO는 user.id만 파싱 중)
+- [~] `PlayerService.getScoresByBotKey(botKey)` 구현 — botKey 단위 점수 목록 조회까지는 됨. **단, `ORDER BY score DESC` 정렬·TOP N 없음** / `getScoreByUser()`는 `return null` 스텁
+- [ ] 복합 인덱스 `(bot_key, score)` 추가 — 미적용
+- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기 — **미연결** (컨트롤러는 시작/포기/숫자/도움말만 분기, 랭킹 없음)
+- [ ] 랭킹 텍스트 포맷(순위·닉네임·점수 TOP 10) — 미작성
 - [ ] **확인**: 두 명 이상 플레이 후 `랭킹` → 정렬된 목록 응답
 
 ### 🟡 STEP 11. [고도화-추후] 어려움 모드 / 전체 랭킹
@@ -336,15 +341,110 @@ src/main/resources/application.yml
 
 ---
 
+## 6-B. 🎯 [2026-06-21 추가] 점수(score) · 시즌 순위 기능 개선 (순차 계획)
+
+> **요구사항(확정)**
+> 1. **점수 조회** — 해당 카카오 유저의 시즌 점수(=글로벌 score) 조회
+> 2. **순위 조회 2종** — ① 전체 순위(모든 봇 통합) ② 해당 봇이 진행한 게임 기록 순위(봇별)
+> 3. **매달 1일 초기화** — score·순위를 매월 1일 0시(Asia/Seoul) **스케줄 배치로 0 초기화** *(사용자 선택)*
+> 4. **시도별 감소 점수** — 적게 틀릴수록 더 많이 획득: `gain = max(MIN_GAIN, BASE - tries*STEP)`
+
+> **🧭 점수 표기 방침 (2026-06-21 결정): MMR(+/−) 아님 → `score`(+ 위주) 채택.**
+> 숫자야구는 상대 없는 **싱글플레이 + 매월 0 리셋 시즌제**라, 깎을 "패배" 이벤트가 구조적으로 없고 레이팅이 수렴할 시간도 없습니다. 따라서 순수 MMR(−)은 부자연스럽고 이탈만 유발 → **누적 score(+ 위주)**가 게임 적합성·이탈 방지·구현 단순성에서 우세.
+> - 표기는 −가 아니라 **"이번 +N / 시즌 누적 N→N"**로 성취감·진행감 전달.
+> - 변별력이 필요하면 **포기 시에만 소폭 −10**(맥락이 분명한 감점)만 허용, **시즌 점수 하한 0**(음수 랭킹 방지).
+
+### 데이터 모델 매핑 (현재 코드 기준 — `User`/`BotUser`)
+
+| 엔티티 | 식별자 | `score` 의미 | 쓰임 |
+|--------|--------|-------------|------|
+| `User` | `appUserId` (앱 단위 유저) | **글로벌 시즌 점수** | 점수 조회 · **전체 순위** |
+| `BotUser` | `botKey` + `botUserKey` | **봇 내 점수** | **봇별 순위** |
+
+> **왜 2개로 나누나**: 같은 카카오 유저라도 "내 전체 점수"와 "이 봇(채팅방)에서의 성적"은 다른 질문입니다. 글로벌은 `User.score` 하나로, 봇별은 `BotUser.score`로 분리하면 두 순위를 각자 인덱스/쿼리로 가볍게 뽑을 수 있습니다(5초 제한 대비).
+
+### 승리 시 점수 적립 — 내부 동작 순서
+
+```
+1. guess() 판정 → 4S(win)
+2. gain = MmrCalculator.gain(tries)        // = max(MIN_GAIN, BASE - tries*STEP), 항상 양수
+3. User(appUserId) 조회/생성 → score += gain        // 글로벌 누적
+4. BotUser(botKey, botUserKey) 조회/생성 → score += gain  // 봇 점수 누적
+5. 응답에 "+gain (이전 → 현재)" 표기 (− 없음)
+   (3·4는 같은 트랜잭션 — 한쪽만 오르는 정합성 깨짐 방지)
+
+[포기 시 — 선택 규칙]
+- giveUp() → score = max(0, score - 10)   // 하한 0, 이때만 − 표기 가능
+```
+
+**시도별 감소 예시** (BASE=100, STEP=5, MIN_GAIN=20)
+
+| tries | gain | 비고 |
+|------|------|------|
+| 1 | 95 | 최고 |
+| 5 | 75 | |
+| 10 | 50 | |
+| 16 이상 | 20 | MIN_GAIN 바닥(아무리 틀려도 보장) |
+
+---
+
+### 🟢 STEP A. 카카오 식별자 확정 (선행·필수)
+> 현재 DTO는 `userRequest.user.id`만 파싱 → 글로벌 식별자(`appUserId`)와 `botKey`가 없으면 위 모델이 성립 안 함. (공식 문서 기준: `bot.id`=봇, `user.id`=botUserKey, `properties.appUserId`=카카오 로그인 계정 식별자)
+
+- [ ] 실제 카카오 요청 JSON 로깅 → `bot.id`(botKey) / `user.id`(botUserKey) / `properties.appUserId`(글로벌)가 실제로 내려오는지 확인
+- [ ] ⚠️ `appUserId`는 **봇에 앱키 연동 시에만** 제공 → 카카오 디벨로퍼스 앱키 연동 여부 먼저 확인 (없으면 `plusfriendUserKey`로 폴백하되 채널 단위 한계 인지)
+- [ ] `SkillRequest` DTO 확장: `appUserId`, `botUserKey`(=user.id), `botKey`(=bot.id) 파싱 추가
+- [ ] **확인**: 로그에서 세 식별자 모두 수신되는지 검증
+
+### 🟢 STEP B. MmrCalculator 순수 함수 (⭐ TDD)
+- [ ] `MmrCalculator.gain(tries): Int` = `max(MIN_GAIN, BASE - tries*STEP)`, 상수는 설정값/companion으로 분리(밸런싱을 배포 없이 조정)
+- [ ] **단위 테스트**: tries=1 최대 / tries 클수록 단조 감소 / 바닥에서 MIN_GAIN 보장 / 경계값
+- [ ] **확인**: `./gradlew test` 통과
+
+### 🟢 STEP C. 승리 시 점수 적립 연결 (핵심 — 지금 비어 있는 부분)
+- [ ] `GameService.guess()` win 분기 → `gain` 산정 후 `User.score += gain`, `BotUser.score += gain` (없으면 생성)
+- [ ] (선택) `giveUp()` → `score = max(0, score - 10)` (하한 0)
+- [ ] **동시성**: 같은 유저 동시 갱신 충돌 방지 → 갱신 트랜잭션 + 유니크 제약 `User(app_user_id)`, `BotUser(bot_key, bot_user_key)`
+- [ ] 응답 포맷: **`+gain (이전 → 현재)`** — − 없이 "이번 +N / 시즌 누적 N→N"
+- [ ] **확인**: 정답 후 `User.score`·`BotUser.score` 둘 다 증가(H2 콘솔/테스트)
+
+### 🟢 STEP D. 점수 조회 기능
+- [ ] `UserService.getScoreByUser(appUserId)` 스텁(`return null`) 채우기 → `User.score` 반환(미등록 시 0/안내)
+- [ ] `SkillController`에 `점수`·`내점수` 발화 분기 + 텍스트 포맷("현재 시즌 점수: 1065")
+- [ ] **확인**: `점수` 입력 → 내 점수 응답
+
+### 🟢 STEP E. 순위 조회 (전체 + 봇별)
+- [ ] `UserRepository.findTop10ByOrderByScoreDesc()` — **전체 순위**
+- [ ] `BotUserRepository.findTop10ByBotKeyOrderByScoreDesc(botKey)` — **봇별 순위** (기존 `getScoresByBotKey`에 정렬·TOP N 보강)
+- [ ] 인덱스: `users(score)`, `bot_users(bot_key, score)` (정렬까지 인덱스로 → 파일정렬 회피)
+- [ ] `SkillController` 발화 분기: `전체랭킹` → 전역 / `랭킹`(또는 `봇랭킹`) → 봇별 + 순위·점수 TOP 10 텍스트
+- [ ] **확인**: 두 명 이상 플레이 후 두 발화 모두 정렬된 목록 응답
+
+### 🟢 STEP F. 매월 1일 초기화 스케줄러 (선택: 배치 0 초기화)
+- [ ] `@EnableScheduling` + `@Scheduled(cron = "0 0 0 1 * *", zone = "Asia/Seoul")`
+- [ ] 벌크 update: `UPDATE users SET score = 0`, `UPDATE bot_users SET score = 0` (`@Modifying` 쿼리)
+- [ ] **운영 지표 로깅**: 리셋 행 수·소요시간 로깅, 실패 시 알림 *(평소 강조하는 "임팩트 측정·장애 감지")*
+- [ ] (권장) 리셋 직전 **스냅샷 저장**(`monthly_score_snapshot`) → 배치 실패 대비 + 추후 '지난달 순위' 확장 여지
+- [ ] 수동 트리거(테스트 프로파일 한정 엔드포인트/메서드)로 **멱등하게** 검증 가능하도록 분리
+- [ ] **확인**: 트리거 후 전 score=0, 다음 게임부터 새 시즌 누적
+
+### 🟢 STEP G. 마무리 검증
+- [ ] 5초 내 응답(추가된 조회·적립 포함) / 동시 적립 정합성 테스트 / README 갱신
+
+> **진행 순서 요약**: **A(식별자) → B(계산기 TDD) → C(적립 연결) → D(점수 조회) → E(전체·봇별 순위) → F(월간 리셋) → G(검증)**. C가 비면 순위에 쌓일 데이터가 없으므로 A·B·C가 최우선입니다.
+
+---
+
 ## 7. 리스크 & 주의사항
 
 | 리스크 | 영향 | 대응 |
 |--------|------|------|
 | **채팅방 식별자 부재** 🆕 | 🟢 채팅방 랭킹 불가 | 실제 요청 JSON 로깅 후 A안(채팅방키)/B안(방 코드) 결정 — STEP 10 선행 |
-| **MMR 밸런싱** 🆕 | 점수 인플레/저평가 | 상수를 설정값으로 분리해 배포 없이 조정, 산정식 단위테스트 |
-| 5초 타임아웃 | 응답 실패 | 랭킹 조회를 `(chatroom_id, mmr)` 인덱스로 경량화, TOP 10 LIMIT |
-| 동시성 🆕 | 같은 user MMR 갱신 충돌 | `Player` 갱신 트랜잭션 + 유니크(chatroom_id, user_id) |
+| **점수 밸런싱** 🆕 | 점수 인플레/저평가 | 상수(BASE/STEP/MIN_GAIN)를 설정값으로 분리해 배포 없이 조정, 산정식 단위테스트 |
+| 5초 타임아웃 | 응답 실패 | 랭킹 조회를 `bot_users(bot_key, score)`·`users(score)` 인덱스로 경량화, TOP 10 LIMIT |
+| 동시성 🆕 | 같은 user 점수 갱신 충돌 | `User`/`BotUser` 갱신 트랜잭션 + 유니크(`app_user_id`, (`bot_key, bot_user_key`)) |
 | H2 파일 영속성 | 재시작 시 데이터 | 파일 모드, 운영은 MySQL 전환 |
+| **월간 리셋 파괴성** 🆕 | 배치 실패 시 시즌 안 바뀜 / 이력 소실 | 리셋 직전 스냅샷 저장 + 멱등 설계 + 건수/소요 로깅·실패 알림 (STEP F) |
 | 범위 과다 | 미완성 위험 | 🟢(MMR→랭킹) 먼저, 🟡(어려움/전체랭킹)은 후순위 |
 
 ---

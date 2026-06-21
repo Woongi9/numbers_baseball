@@ -5,8 +5,8 @@ import jakarta.persistence.*
 @Entity
 @Table(name = "users")
 class User (
-    @Column(name = "kakao_app_key")
-    val kakaoAppKey: String,
+    @Column(name = "app_user_id")
+    val appUserId: String,
     ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
