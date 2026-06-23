@@ -327,18 +327,79 @@ src/main/resources/application.yml
 - [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
 - [ ] `GameService`: 정답 시 score 산정 → `User`/`BotUser`에 누적 저장 — **미연결** (현재 `guess()`는 `game.win()`만, score 갱신 없음)
 - [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기 — **미반영** (현재는 "정답입니다! N번 만에…"만)
+- [ ] 🆕 정답 응답에 **상위 N% (등수/전체)** 표기 — 아래 9-P 설계 참고 — **미반영**
 - [ ] **단위 테스트**: 시도수별 획득량/최소 보장/난이도 배수/포기 무변동 — **미작성**
-- [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 검증
+- [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 + 상위% 검증
 
 > ⚠️ **정리 필요(부채)**: ① `Game.score = (100*multiplier).toInt()`를 **생성 시점에 고정** 중 → PLAN의 `gain = max(MIN_GAIN, BASE - tries*STEP)*배수`(승리 시 계산)로 이전 필요. ② `GameDifficulty`에 `val multiplier`와 `fun multiplier()` 중복. ③ `Game` 인덱스 `columnList="userId,status"`가 없는 컬럼 참조 → `botKey,status`로 수정(DDL 깨짐).
 
-### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방=botKey) 🔶 진행 중 (조회 골격만)
-- [~] ⚠️ **선행 확인**: 채팅방 식별자 → `botKey`(=bot.id)/`botUserKey`(=user.id)/`appUserId`로 설계 결정. **실제 카카오 요청 JSON 로깅 검증은 미확인** (DTO는 user.id만 파싱 중)
-- [~] `UserService.getScoresByBotKey(botKey)` 구현 — botKey 단위 점수 목록 조회까지는 됨. **단, `ORDER BY score DESC` 정렬·TOP N 없음** / `getScoreByUser()`는 `return null` 스텁
-- [ ] 복합 인덱스 `(bot_key, score)` 추가 — 미적용
-- [ ] `RankingService` + `SkillController`에 `랭킹` 발화 분기 — **미연결**
-- [ ] 랭킹 텍스트 포맷(순위·닉네임·점수 TOP 10) — 미작성
-- [ ] **확인**: 두 명 이상 플레이 후 `랭킹` → 정렬된 목록 응답
+#### 🎯 STEP 9-P. 정답 응답에 "상위 N%" 표기 (2026-06-23 추가)
+
+> 승리 시 **획득량 + 이번달 누적 score**에 더해 **상위 백분위**를 함께 보여준다. STEP 10에서 만든 score 인덱스를 재활용한다.
+
+**원리** — 정렬·전체 조회 없이 **COUNT 2번**으로 끝난다(퍼센타일은 "내 위에 몇 명?"만 세면 됨).
+
+```
+rank   = (나보다 점수 높은 사람 수) + 1
+topPct = ceil(rank * 100.0 / total)     // 작을수록 상위권
+```
+
+```sql
+-- 적립(score += gain) 직후, 같은 트랜잭션에서
+SELECT COUNT(*) FROM users WHERE score > :myScore;  -- index range scan (테이블 접근 X)
+SELECT COUNT(*) FROM users;
+```
+
+**내부 동작 순서** (승리 분기에 끼워넣기)
+
+```
+1. guess() → 4S(win)
+2. gain = MmrCalculator.gain(tries)            // STEP B
+3. User.score += gain                          // STEP C, 같은 트랜잭션
+4. higher = COUNT(score > myScore); total = COUNT(*)
+   rank = higher + 1; topPct = ceil(rank*100/total)
+5. 응답 조립("+gain (이전→현재)" + "상위 topPct% (rank/total)")
+```
+
+**응답 예시**
+```
+🎉 정답! 5273 (7번)
++65점  (1000 → 1065)
+🏅 이번 시즌 상위 5% (5위 / 100명)
+```
+
+| 내 점수 | 나보다 높은 사람 | rank | total | 상위 % |
+|--------|-----------------|------|-------|--------|
+| 1065 | 4 | 5 | 100 | 상위 5% |
+| 1065 | 0 | 1 | 100 | 상위 1% (1등) |
+
+**주의점**
+
+| 구분 | 이슈 | 대응 |
+|------|------|------|
+| 🔴 동점 | `score > myScore`는 동점자를 같은 등수로 묶음(공동순위) | 보수적·직관적 → 이대로 채택 |
+| 🔴 표본부족 | `total`이 작으면(혼자=항상 100%) 무의미 | `total < N`이면 % 대신 "표본 부족" 안내 분기 |
+| 🟡 성능 | 하위권은 `score > me`가 거의 전체 카운트 | `users(score)` 인덱스로 인덱스 전용 처리(수만까진 OK) |
+| 🟡 트랜잭션 | 적립 **후** 카운트해야 방금 점수 반영 | 같은 트랜잭션에서 계산 |
+| 🟢 월리셋 | 리셋 직후 다 0점이라 의미 약함 | 시즌 초반 안내 문구 |
+| 🟢 스케일업 | 유저 급증 시 RDB COUNT 부담 | Redis Sorted Set `ZREVRANK`(O(log n)) 또는 분 단위 캐시로 전환 |
+
+**범위(확정 필요)**: `이번달 총합 score`와 일관되게 **전체(글로벌 `User.score`) 기준**을 기본으로. 필요 시 **봇별(`BotUser.score`, STEP 10 인덱스 `(bot_key, score)` 재사용)** 추가 또는 동시 표기(`상위 5%(전체)·2%(이 방)`).
+
+- [ ] `UserRepository.countByScoreGreaterThan(score)` + `count()` (또는 전용 percentile 쿼리)
+- [ ] `users(score)` 인덱스 추가 (글로벌 기준 시)
+- [ ] 승리 응답 포맷에 `상위 N% (rank/total)` 합성 + 표본부족 분기
+- [ ] **단위 테스트**: 동점/1등/꼴찌/표본부족 경계값
+- [ ] **확인**: 정답 후 응답에 상위% 정상 표기
+
+### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방=botKey) ✅ 읽기 완료 (점수 적립 연결만 STEP 9 대기) — 2026-06-23 `feat/ranking`
+- [x] ⚠️ **선행 확인**: 채팅방 식별자 = `botKey`(=bot.id)로 결정 + `SkillRequest.bot.id` 파싱 추가 *(단, `appUserId`/`botUserKey` 전체 + 실제 카카오 JSON 로깅 검증은 STEP A로 이월)*
+- [x] 정렬·TOP N — `BotUserRepository.findTop10ByBotKeyOrderByScoreDesc` 신설로 해결 *(기존 `getScoresByBotKey`는 비정렬 그대로 / `getScoreByUser` 스텁은 STEP D 소관)*
+- [x] 복합 인덱스 `(bot_key, score)` 추가 — `BotUser`에 `@Index` 적용(정렬까지 인덱스 → filesort 회피)
+- [x] `RankingService` + `SkillController`에 `랭킹`/`봇랭킹`/`순위` 발화 분기 — 연결
+- [x] 랭킹 텍스트 포맷(순위·점수 TOP 10) — 작성 *(닉네임 컬럼 부재 → `botUserKey` 마스킹으로 대체, 닉네임 도입 STEP 9/A 후 교체)*
+- [x] **확인**: 테스트 서버에서 `랭킹` 발화 → 정렬 목록 응답 정상 *(시드 데이터 기준 — 실제 게임 누적은 STEP 9 STEP C 연결 후)*
+- [ ] (잔여) 실데이터 누적 검증 — STEP 9 STEP C(승리 시 `BotUser.score +=`) 연결 후 "실제 두 명 플레이 → 랭킹"
 
 ### 🟡 STEP 11. [고도화-추후] 어려움 모드(판정부) / 전체 랭킹
 - [x] 어려움 모드 **정답 생성** — `GameDifficulty.symbols`로 HARD(`a~e`)/EASY 후보 주입 완료
