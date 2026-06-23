@@ -324,7 +324,7 @@ src/main/resources/application.yml
 - [x] `User` 엔티티 + `UserRepository` 추가 *(`appUserId`+`score`. nickname/wins/totalTries 등은 미보유)*
 - [x] 🆕 `BotUser` 엔티티 + `BotUserRepository`(`findByBotKey`) 추가 — 봇/채팅방 단위 점수 보관
 - [x] `startGame(botKey, gameDifficulty=NORMAL)` — 난이도별 후보로 4자리 정답 생성 + 난이도별 테스트(NORMAL/HARD/EASY score=100/200/50, 기호집합·길이·중복 검증)
-- [ ] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
+- [x] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
 - [ ] `GameService`: 정답 시 score 산정 → `User`/`BotUser`에 누적 저장 — **미연결** (현재 `guess()`는 `game.win()`만, score 갱신 없음)
 - [ ] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기 — **미반영** (현재는 "정답입니다! N번 만에…"만)
 - [ ] 🆕 정답 응답에 **상위 N% (등수/전체)** 표기 — 아래 9-P 설계 참고 — **미반영**
