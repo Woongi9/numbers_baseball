@@ -2,6 +2,10 @@ package com.example.baseball.controller
 
 import com.example.baseball.domain.game.GameRepository
 import com.example.baseball.domain.game.GameStatus
+import com.example.baseball.domain.user.BotUser
+import com.example.baseball.domain.user.BotUserRepository
+import com.example.baseball.domain.user.User
+import com.example.baseball.domain.user.UserRepository
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -20,21 +24,33 @@ import kotlin.test.assertNotNull
 class SkillControllerIntegrationTest @Autowired constructor(
     private val mockMvc: MockMvc,
     private val gameRepository: GameRepository,
+    private val userRepository: UserRepository,
+    private val botUserRepository: BotUserRepository,
 ) {
-    /** 카카오 스킬 요청 본문 생성 */
-    private fun body(utterance: String, userId: String) =
-        """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}}}"""
+    /** 카카오 스킬 요청 본문 생성 (botKey 선택적으로 bot.id 포함) */
+    private fun body(utterance: String, userId: String, botKey: String? = null): String {
+        val botPart = botKey?.let { ""","bot":{"id":"$it"}""" } ?: ""
+        return """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}}$botPart}"""
+    }
 
     /** /skill/play 호출 후 simpleText.text 가 expected 를 포함하는지 검증 */
-    private fun play(utterance: String, userId: String, expectedText: String) {
+    private fun play(utterance: String, userId: String, expectedText: String, botKey: String? = null) {
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
-            content = body(utterance, userId)
+            content = body(utterance, userId, botKey)
         }.andExpect {
             status { isOk() }
             jsonPath("$.version") { value("2.0") }
             jsonPath("$.template.outputs[0].simpleText.text") { value(containsString(expectedText)) }
         }
+    }
+
+    /** 랭킹용 시드: User(FK) 저장 후 BotUser(botKey, botUserKey, score) 저장 */
+    private fun seedBotUser(botKey: String, botUserKey: String, score: Int) {
+        val user = userRepository.save(User(appUserId = "app-$botUserKey"))
+        botUserRepository.save(
+            BotUser(user = user, botUserKey = botUserKey, botKey = botKey, score = score)
+        )
     }
 
     @Test
@@ -103,6 +119,30 @@ class SkillControllerIntegrationTest @Autowired constructor(
     @DisplayName("알 수 없는 발화는 도움말을 반환한다")
     fun helpMessage() {
         play("안녕", "it-user-help", "숫자야구")
+    }
+
+    @Test
+    @DisplayName("랭킹: 시드된 점수가 내림차순 TOP 텍스트로 응답된다")
+    fun rankingSortedByScore() {
+        val botKey = "it-bot-rank"
+        seedBotUser(botKey, "low", 100)
+        seedBotUser(botKey, "high", 300)
+
+        // 1위가 high(300), 점수 텍스트가 포함되는지 확인
+        play("랭킹", "any-user", "1위", botKey = botKey)
+        play("랭킹", "any-user", "300점", botKey = botKey)
+    }
+
+    @Test
+    @DisplayName("랭킹: 해당 봇에 점수가 없으면 안내 메시지")
+    fun rankingEmpty() {
+        play("랭킹", "any-user", "아직 랭킹에 등록된 점수가 없습니다", botKey = "it-bot-empty")
+    }
+
+    @Test
+    @DisplayName("랭킹: bot 정보가 없으면 안내 메시지")
+    fun rankingNoBotKey() {
+        play("랭킹", "any-user", "채팅방 정보를 확인할 수 없어")
     }
 
     /** 정답과 다른, 서로 다른 숫자 4자리 추측을 하나 생성 */

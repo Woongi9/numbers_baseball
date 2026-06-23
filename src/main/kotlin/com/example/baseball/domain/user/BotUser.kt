@@ -3,7 +3,13 @@ package com.example.baseball.domain.user
 import jakarta.persistence.*
 
 @Entity
-@Table(name = "bot_users")
+@Table(
+    name = "bot_users",
+    indexes = [
+        // 봇별 랭킹: WHERE bot_key = ? ORDER BY score DESC 를 정렬까지 인덱스로 처리.
+        Index(name = "idx_bot_users_bot_key_score", columnList = "bot_key, score"),
+    ],
+)
 class BotUser (
     @JoinColumn(name = "user_id")
     @ManyToOne(fetch = FetchType.LAZY)
