@@ -10,12 +10,21 @@ import io.swagger.v3.oas.annotations.media.Schema
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SkillRequest(
     val userRequest: UserRequest,
+    // 카카오 페이로드의 최상위 bot.id = 봇(채팅방) 식별자. 랭킹을 봇 단위로 묶는 키.
+    // 일부 요청/테스트에는 없을 수 있어 nullable.
+    val bot: Bot? = null,
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class UserRequest(
         @field:Schema(description = "사용자 발화", example = "1234")
         val utterance: String,
         val user: User,
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class Bot(
+        @field:Schema(description = "봇(채팅방) ID = botKey", example = "test-bot-001")
+        val id: String,
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)

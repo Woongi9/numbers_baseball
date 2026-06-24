@@ -4,6 +4,8 @@ import com.example.baseball.dto.SkillRequest
 import com.example.baseball.dto.SkillResponse
 import com.example.baseball.service.GameService
 import com.example.baseball.service.GuessOutcome
+import com.example.baseball.service.RankEntry
+import com.example.baseball.service.RankingService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.web.bind.annotation.PostMapping
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 class SkillController(
     private val gameService: GameService,
+    private val rankingService: RankingService,
 ) {
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
@@ -26,12 +29,13 @@ class SkillController(
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val userId = request.userRequest.user.id
+        val botKey = request.bot?.id
         val utterance = request.userRequest.utterance.trim()
-        return SkillResponse.text(handle(userId, utterance))
+        return SkillResponse.text(handle(userId, botKey, utterance))
     }
 
     /** utterance를 명령어/숫자로 분기. 사용자 입력 오류는 안내 메시지로 변환(500 대신 정상 응답). */
-    private fun handle(userId: String, utterance: String): String =
+    private fun handle(userId: String, botKey: String?, utterance: String): String =
         try {
             when {
                 utterance in START_COMMANDS -> {
@@ -43,6 +47,8 @@ class SkillController(
                     val answer = gameService.giveUp(userId)
                     "게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요."
                 }
+
+                utterance in RANKING_COMMANDS -> formatRanking(botKey)
 
                 utterance.isNotBlank() && utterance.all { it.isDigit() } -> {
                     formatGuess(gameService.guess(userId, utterance))
@@ -67,16 +73,35 @@ class SkillController(
         }
     }
 
+    /** 봇(채팅방) 랭킹 TOP 10 텍스트. botKey 없음·빈 랭킹은 안내 메시지로 변환. */
+    private fun formatRanking(botKey: String?): String {
+        if (botKey == null) return "채팅방 정보를 확인할 수 없어 랭킹을 보여줄 수 없습니다."
+
+        val ranking = rankingService.getBotRanking(botKey)
+        if (ranking.isEmpty()) {
+            return "아직 랭킹에 등록된 점수가 없습니다. 게임에서 정답을 맞히면 점수가 쌓여요."
+        }
+        return buildString {
+            appendLine("🏆 이 채팅방 랭킹 TOP ${ranking.size}")
+            ranking.forEach { append(formatRankLine(it)) }
+        }.trimEnd()
+    }
+
+    private fun formatRankLine(e: RankEntry): String =
+        "${e.rank}위  ${e.label}  ${e.score}점\n"
+
     private fun helpMessage(): String =
         """
         숫자야구 게임입니다.
         - '시작' : 새 게임 시작
         - 서로 다른 숫자 입력 : 추측 (예: 1234)
         - '포기' : 정답 공개
+        - '랭킹' : 이 채팅방 점수 순위
         """.trimIndent()
 
     companion object {
         private val START_COMMANDS = setOf("시작", "새게임", "시작하기")
         private const val GIVEUP_COMMAND = "포기"
+        private val RANKING_COMMANDS = setOf("랭킹", "봇랭킹", "순위")
     }
 }
