@@ -411,7 +411,8 @@ SELECT COUNT(*) FROM users;
 - [ ] 시도 제한 → 힌트 → 자릿수 선택 → 전적(승률·평균 시도)
 
 ### 🟡 STEP 13. 운영 강화 (이후)
-- [ ] H2 → MySQL 전환 / 요청 로깅 + 응답시간 메트릭 / 모니터링·알림
+- [ ] H2 → MySQL 전환 → **[6-C. INF-1~3 으로 구체화됨](#6-c--2026-06-27-추가-로컬-mysql-전환--aws-운영-배포--github-actions-cicd)** (로컬 MySQL · AWS EC2/RDS · GitHub Actions)
+- [ ] 요청 로깅 + 응답시간 메트릭 / 모니터링·알림
 
 ---
 
@@ -509,6 +510,224 @@ SELECT COUNT(*) FROM users;
 
 ---
 
+## 6-C. 🚀 [2026-06-27 추가] 로컬 MySQL 전환 · AWS 운영 배포 · GitHub Actions CI/CD
+
+> **목표**: 로컬 개발 DB를 H2 → **로컬 MySQL**로, 운영을 **AWS EC2(앱) + RDS MySQL(DB)**로, 배포를 **GitHub Actions 자동 배포**로 전환.
+> **전제**: STEP 10 완료됨. **STEP 9(점수 적립 C)만 끝내면** 이 섹션의 INF 단계로 운영 배포 진행.
+
+### ⚠️ 먼저: 기존 배포와의 관계 (의사결정 기록)
+
+| 구분 | 현재(STEP 6) | 이번 전환 |
+|------|--------------|-----------|
+| 운영 인프라 | **OCI(Oracle Cloud) ARM VM** + DuckDNS | **AWS EC2 + RDS** |
+| 운영 DB | (앱과 같은 VM의) H2 파일 | **RDS MySQL**(앱/DB 분리) |
+| 배포 방식 | 수동 `bootJar` → `scp` → systemd | **GitHub Actions 자동** |
+
+> **왜 바꾸나 / 트레이드오프**: OCI는 무료지만 ① DB가 앱 VM에 종속(재시작·디스크 장애 시 데이터 위험), ② 배포가 수동이라 *임팩트 측정·재현성*이 약함. AWS로 가면 **앱(EC2)과 DB(RDS)를 분리**해 가용성↑, RDS 자동 백업·장애조치(Multi-AZ 선택)로 운영 안정성↑, GitHub Actions로 **배포 자동화**가 붙습니다. 단점은 **비용**(EC2 t3.micro·RDS db.t3.micro는 12개월 프리티어, 이후 과금) + RDS 사설 서브넷·SG 구성 학습비용. *DuckDNS/Nginx/HTTPS 자산은 EC2에서 그대로 재사용 가능*하므로 SSL은 다시 안 만들어도 됩니다.
+
+---
+
+### 🟢 STEP INF-1. 로컬 MySQL 전환 (H2 → MySQL)
+
+> **원리**: 로컬과 운영의 DB 엔진을 **MySQL로 통일**해 "로컬에선 되는데 운영에서 깨지는"(H2↔MySQL SQL 방언 차이) 문제를 제거. **테스트(`test`)는 H2 인메모리 유지**해 CI 속도/격리 확보 — 이 이원화가 핵심.
+
+- [ ] **로컬 MySQL 띄우기** — Docker 권장(설치 부담 없음, 버전 고정):
+  ```yaml
+  # docker-compose.yml (프로젝트 루트)
+  services:
+    mysql:
+      image: mysql:8.0
+      ports: ["3306:3306"]
+      environment:
+        MYSQL_DATABASE: baseball
+        MYSQL_USER: baseball
+        MYSQL_PASSWORD: baseball
+        MYSQL_ROOT_PASSWORD: rootpw
+      command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      volumes: ["mysql-data:/var/lib/mysql"]
+  volumes: { mysql-data: {} }
+  ```
+  `docker compose up -d` → `localhost:3306`. (운영 RDS와 **같은 8.0 + utf8mb4**로 맞춤 → 한글/이모지 안전)
+
+- [ ] **드라이버 의존성 추가** — `build.gradle.kts`:
+  ```kotlin
+  runtimeOnly("com.mysql:mysql-connector-j")   // h2는 test에서만
+  testRuntimeOnly("com.h2database:h2")          // 기존 runtimeOnly → testRuntimeOnly로 변경
+  ```
+  > **왜**: H2를 `testRuntimeOnly`로 내리면 운영 JAR에 H2가 안 섞임(의존성 위생). 운영은 MySQL만.
+
+- [ ] **로컬 프로파일 DB 교체** — `resources-env/local/application.yml`의 datasource를 H2 → MySQL로:
+  ```yaml
+  spring:
+    datasource:
+      url: jdbc:mysql://localhost:3306/baseball?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      username: baseball
+      password: baseball
+    jpa:
+      hibernate:
+        ddl-auto: update           # 로컬은 update 유지
+      properties:
+        hibernate:
+          dialect: org.hibernate.dialect.MySQLDialect
+    h2:
+      console:
+        enabled: false             # MySQL 전환 시 비활성 (DBeaver/MySQL Workbench로 확인)
+  ```
+- [ ] **테스트 프로파일 추가** — `resources-env/test/application.yml`(H2 인메모리, `ddl-auto: create-drop`)로 분리 → CI에서 DB 없이 테스트.
+- [ ] **확인**: `docker compose up -d` 후 `./gradlew bootRun` 기동 → 게임 1판 → MySQL `baseball.game`/`users`/`bot_users`에 row 적재 확인. `./gradlew test`(H2)도 통과.
+
+> ⚠️ **이관 주의**: 기존 `./data/baseball.mv.db`(H2 파일) 데이터는 자동 이전 안 됨. 로컬은 폐기해도 무방하나, 운영 OCI에 쌓인 실데이터가 있으면 **MySQL로 마이그레이션**(`mysqldump` 불가 → H2 export CSV → `LOAD DATA` 또는 앱 기동 시 재생성)이 필요. 시즌 리셋 기능(STEP F)이 있으니 *다음 달 1일 리셋 타이밍에 맞춰 빈 상태로 시작*하는 게 가장 단순.
+
+---
+
+### 🟢 STEP INF-2. AWS 인프라 구성 (EC2 + RDS)
+
+> **원리(네트워크 격리)**: **EC2는 퍼블릭 서브넷**(인터넷 노출, 카카오 요청 수신), **RDS는 프라이빗 서브넷**(인터넷 차단, EC2만 접근). DB를 외부에 절대 안 여는 게 보안의 핵심.
+
+```
+인터넷 ──443──▶ [EC2: Nginx→Spring(:8080)]  ──3306──▶ [RDS MySQL (private)]
+  (카카오)        퍼블릭 서브넷                          프라이빗 서브넷
+```
+
+- [ ] **RDS 생성** — MySQL 8.0, `db.t3.micro`(프리티어), **퍼블릭 액세스 No**, 프라이빗 서브넷, 스토리지 자동 확장 on, **자동 백업 7일** on.
+- [ ] **보안 그룹(SG) — 최소 권한**:
+
+  | SG | 인바운드 | 소스 | 의미 |
+  |----|---------|------|------|
+  | `sg-ec2` | 443, 80 | `0.0.0.0/0` | 카카오/사용자 HTTPS |
+  | `sg-ec2` | 22 | **내 IP만** | SSH(전체 개방 금지) |
+  | `sg-rds` | 3306 | **`sg-ec2`** | EC2에서만 DB 접근(IP 아님, **SG 참조**) |
+
+  > **왜 SG 참조?**: RDS 인바운드 소스를 IP가 아닌 `sg-ec2`로 지정하면, EC2 IP가 바뀌어도 규칙 수정 불필요 + EC2 외 누구도 3306 접근 불가.
+
+- [ ] **EC2 생성** — Ubuntu 22.04, `t3.micro`, 퍼블릭 IP, `sg-ec2` 연결, Java 21 설치, `/home/ubuntu/app` 디렉터리.
+- [ ] **운영 프로파일 추가** — `resources-env/prod/application.yml`(시크릿은 **환경변수 주입**, 평문 금지):
+  ```yaml
+  server: { port: 8080 }
+  spring:
+    datasource:
+      url: ${DB_URL}            # jdbc:mysql://<rds-endpoint>:3306/baseball?...
+      username: ${DB_USERNAME}
+      password: ${DB_PASSWORD}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+    jpa:
+      hibernate:
+        ddl-auto: validate      # ⚠️ 운영은 validate (update/create 금지 — 의도치 않은 스키마 변경 방지)
+      properties: { hibernate: { dialect: org.hibernate.dialect.MySQLDialect } }
+  ```
+  > **왜 `validate`?**: 운영에서 `ddl-auto: update`는 컬럼 삭제/타입변경을 감지 못하거나 위험한 ALTER를 자동 실행할 수 있음. 운영 스키마는 **Flyway/Liquibase 마이그레이션**으로 관리하는 게 정석(추후 도입 권장). 당장은 최소한 `validate`로 *앱이 기대하는 스키마와 실제 DB 일치 여부만 검증*.
+
+- [ ] **systemd 서비스 등록** — `EnvironmentFile`로 시크릿 분리:
+  ```ini
+  # /etc/systemd/system/baseball.service
+  [Service]
+  EnvironmentFile=/home/ubuntu/app/.env      # DB_URL/DB_USERNAME/DB_PASSWORD (chmod 600)
+  ExecStart=/usr/bin/java -jar -Dspring.profiles.active=prod /home/ubuntu/app/baseball.jar
+  Restart=always
+  User=ubuntu
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  `-P profile=prod`로 빌드 시 `resources-env/prod`가 포함됨에 유의(빌드/런타임 프로파일 일치).
+
+- [ ] **HTTPS** — 기존 DuckDNS 도메인을 EC2 IP로 재지정 + Nginx 80/443 프록시 + acme.sh 인증서(STEP 6 자산 재사용). 카카오 스킬 URL은 동일 도메인 유지 시 **변경 불필요**.
+- [ ] **확인**: EC2에서 `mysql -h <rds-endpoint> -u baseball -p` 접속 성공 + `curl https://도메인/skill/play` 정답 JSON.
+
+---
+
+### 🟢 STEP INF-3. GitHub Actions 자동 배포 (CI/CD)
+
+> **배포 전략 — SSH 푸시형**: `main` 푸시 → Actions에서 **빌드+테스트** → **`scp`로 JAR 업로드** → **`ssh`로 systemd 재시작**. (러너→EC2 단방향, 가장 단순하고 시크릿 노출면 적음. 무중단이 필요해지면 추후 헬스체크+블루그린으로 확장)
+
+```
+[git push main]
+   └─▶ GitHub Actions 러너
+        1. checkout
+        2. JDK 21 setup
+        3. ./gradlew test            # H2 test 프로파일 (DB 불필요)
+        4. ./gradlew bootJar -Pprofile=prod  → baseball.jar
+        5. scp baseball.jar  →  EC2:/home/ubuntu/app/
+        6. ssh EC2: sudo systemctl restart baseball
+        7. (권장) curl 헬스체크로 기동 확인 → 실패 시 워크플로 실패 처리
+```
+
+- [ ] **GitHub Secrets 등록** (Settings → Secrets and variables → Actions):
+
+  | Secret | 용도 |
+  |--------|------|
+  | `EC2_HOST` | EC2 퍼블릭 IP/도메인 |
+  | `EC2_SSH_KEY` | 배포용 SSH **private key** (전용 키 권장, 권한 최소화) |
+  | `EC2_USER` | `ubuntu` |
+
+  > **DB 시크릿은 GitHub가 아니라 EC2의 `.env`에 둔다** — 러너는 DB에 접속하지 않으므로(테스트는 H2) RDS 자격증명을 Actions에 노출할 필요가 없음. *시크릿 노출면 최소화* 원칙.
+
+- [ ] **워크플로 작성** — `.github/workflows/deploy.yml`:
+  ```yaml
+  name: Deploy to EC2
+  on:
+    push:
+      branches: [ main ]
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-java@v4
+          with: { distribution: temurin, java-version: '21' }
+        - name: Build & Test
+          run: |
+            chmod +x ./gradlew
+            ./gradlew test
+            ./gradlew bootJar -Pprofile=prod
+        - name: Upload JAR to EC2
+          uses: appleboy/scp-action@v0.1.7
+          with:
+            host: ${{ secrets.EC2_HOST }}
+            username: ${{ secrets.EC2_USER }}
+            key: ${{ secrets.EC2_SSH_KEY }}
+            source: build/libs/baseball.jar
+            target: /home/ubuntu/app/
+            strip_components: 2
+        - name: Restart service & health check
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.EC2_HOST }}
+            username: ${{ secrets.EC2_USER }}
+            key: ${{ secrets.EC2_SSH_KEY }}
+            script: |
+              sudo systemctl restart baseball
+              sleep 8
+              curl -fsS http://localhost:8080/skill/play \
+                -H "Content-Type: application/json" \
+                -d '{"userRequest":{"utterance":"랭킹","user":{"id":"ci"},"bot":{"id":"ci"}}}' \
+                || (echo "헬스체크 실패"; sudo journalctl -u baseball -n 50; exit 1)
+  ```
+  > **내부 동작 핵심**: `test`가 실패하면 그 뒤(빌드/업로드/재시작)가 **전부 중단** → 깨진 코드가 운영에 못 나감(*장애 예방*). 마지막 `curl` 헬스체크 실패 시 워크플로를 **빨간불**로 만들고 직전 로그를 출력 → *장애 빠른 감지*.
+
+- [ ] **(권장) 롤백 안전장치**: 재시작 전 기존 JAR을 `baseball.jar.bak`로 백업 → 헬스체크 실패 시 `.bak` 복구 후 재기동. 무중단까진 아니어도 *재발 방지/빠른 복구*.
+- [ ] **확인**: 사소한 커밋을 `main`에 푸시 → Actions 통과 → 카카오 봇에서 정상 응답.
+
+---
+
+### 📋 인프라 전환 진행 순서 (요약)
+
+```
+STEP 9 STEP C(점수 적립) 완료
+   └─▶ INF-1  로컬 MySQL 전환 (+ test=H2 분리)         ← 코드/프로파일
+   └─▶ INF-2  AWS EC2+RDS 구성 (SG 최소권한, prod 프로파일) ← 인프라
+   └─▶ INF-3  GitHub Actions 자동 배포 (test→build→scp→restart→헬스체크)
+   └─▶ 카카오 스킬 URL은 도메인 유지 시 변경 불필요
+```
+
+| 단계 | 산출물 | 검증 |
+|------|--------|------|
+| INF-1 | `docker-compose.yml`, MySQL용 `local`/H2 `test` 프로파일 | 로컬 게임 → MySQL row, `test` 통과 |
+| INF-2 | RDS, EC2, `sg-ec2`/`sg-rds`, `prod` 프로파일, systemd `.env` | EC2→RDS 접속, `curl https` 정답 |
+| INF-3 | `.github/workflows/deploy.yml`, GitHub Secrets | `main` 푸시 → 자동 배포 + 헬스체크 |
+
+---
+
 ## 7. 리스크 & 주의사항
 
 | 리스크 | 영향 | 대응 |
@@ -517,7 +736,10 @@ SELECT COUNT(*) FROM users;
 | **점수 밸런싱** 🆕 | 점수 인플레/저평가 | 상수(BASE/STEP/MIN_GAIN)를 설정값으로 분리해 배포 없이 조정, 산정식 단위테스트 |
 | 5초 타임아웃 | 응답 실패 | 랭킹 조회를 `bot_users(bot_key, score)`·`users(score)` 인덱스로 경량화, TOP 10 LIMIT |
 | 동시성 🆕 | 같은 user 점수 갱신 충돌 | `User`/`BotUser` 갱신 트랜잭션 + 유니크(`app_user_id`, (`bot_key, bot_user_key`)) |
-| H2 파일 영속성 | 재시작 시 데이터 | 파일 모드, 운영은 MySQL 전환 |
+| H2 파일 영속성 | 재시작 시 데이터 | 파일 모드, 운영은 MySQL 전환 (→ 6-C: 로컬 MySQL·RDS) |
+| **RDS 자격증명 노출** 🆕 | 🔴 DB 탈취 | `prod` 프로파일 `${ENV}` 주입 + EC2 `.env`(600) — Actions/Git에 평문 금지 |
+| **운영 스키마 변경** 🆕 | 🔴 데이터 손상 | 운영 `ddl-auto: validate`(자동 ALTER 금지), 변경은 마이그레이션 도구로 |
+| **배포 중 장애** 🆕 | 잘못된 빌드 운영 반영 | Actions에서 `test` 실패 시 중단 + 배포 후 `curl` 헬스체크 + JAR 백업 롤백 |
 | **월간 리셋 파괴성** 🆕 | 배치 실패 시 시즌 안 바뀜 / 이력 소실 | 리셋 직전 스냅샷 저장 + 멱등 설계 + 건수/소요 로깅·실패 알림 (STEP F) |
 | 범위 과다 | 미완성 위험 | 🟢(MMR→랭킹) 먼저, 🟡(어려움/전체랭킹)은 후순위 |
 
