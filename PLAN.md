@@ -331,7 +331,30 @@ src/main/resources/application.yml
 - [ ] **단위 테스트**: 시도수별 획득량/최소 보장/난이도 배수/포기 무변동 — **미작성**
 - [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 + 상위% 검증
 
-> ⚠️ **정리 필요(부채)**: ① `Game.score = (100*multiplier).toInt()`를 **생성 시점에 고정** 중 → PLAN의 `gain = max(MIN_GAIN, BASE - tries*STEP)*배수`(승리 시 계산)로 이전 필요. ② `GameDifficulty`에 `val multiplier`와 `fun multiplier()` 중복. ③ `Game` 인덱스 `columnList="userId,status"`가 없는 컬럼 참조 → `botKey,status`로 수정(DDL 깨짐).
+> ⚠️ **정리 필요(부채)**: ① `Game.score = (100*multiplier).toInt()`를 **생성 시점에 고정** 중 → PLAN의 `gain = max(MIN_GAIN, BASE - tries*STEP)*배수`(승리 시 계산)로 이전 필요. ② `GameDifficulty`에 `val multiplier`와 `fun multiplier()` 중복. ③ ~~`Game` 인덱스 `columnList="userId,status"`가 없는 컬럼 참조~~ → ✅ **2026-06-27 수정 완료**(`idx_game_bot_key_status`, `columnList="bot_key, status"`. 로컬 MySQL 전환 시 DDL 깨짐 방지).
+
+#### 🔎 STEP 9-F. 실제 플레이 발견 보완점 (2026-06-27, 로컬 MySQL 전환 후 테스트)
+
+> 로컬 MySQL 전환 직후 실제로 게임을 돌려보니 **점수 적립(STEP C)이 비어 있어 생기는 증상**들이 드러남. 아래 1~3은 STEP C 미연결이 근본 원인이고, 4는 운영 관측성 보강. 우선순위: **2·3(적립 연결) → 1(행위 기록) → 4(요청 로깅)**.
+
+**🔴 중요 (반드시 수정)**
+
+- [ ] **(증상 2) 시도 시 `User`/`BotUser`가 자동 저장 안 됨** — 첫 추측(또는 게임 시작) 시점에 해당 유저(`User`=appUserId, `BotUser`=botKey+botUserKey)가 없으면 **생성(upsert)**되어야 하는데 현재 안 만들어짐. → STEP C의 "없으면 생성" 로직이 비어 있는 것. **getOrCreate** 형태로 연결 필요.
+- [ ] **(증상 3) 정답 시 `User` 저장·`score` 증가 안 됨** — 4S(win) 분기에서 `gain` 산정 후 `User.score += gain`, `BotUser.score += gain` 저장이 누락. 현재 `guess()`는 `game.win()`만 호출하고 점수 적립을 안 함(= STEP C 핵심 공백). **승리 분기에 적립 연결 + 같은 트랜잭션 저장**.
+
+**🟡 경고 (수정 권장)**
+
+- [ ] **(증상 1) 유저별 행위 기록(제출/시작/포기) 부재** — 누가 언제 게임 시작/추측 제출/포기했는지 추적이 안 됨. 두 가지 층위로 정리:
+  - **게임 단위 상태**: 이미 `Game`에 `status(PLAYING/WON/GIVEUP)` + `tries` + `createdAt/finishedAt`이 있으므로, **포기 시 `giveUp()`이 실제 호출·저장되는지** 먼저 점검(현재 포기 발화가 DB에 반영되는지 확인).
+  - **(선택) 행위 이력 테이블**: 제출 단위 로그가 필요하면 `GameEvent`(gameId, botUserKey, type=START/GUESS/GIVEUP/WIN, payload, createdAt) 신설 검토. 다만 과설계 주의 — 우선은 `Game` 상태로 충분한지 판단 후 결정.
+
+**🟢 제안 (운영 관측성)**
+
+- [ ] **(증상 4) 모든 요청 로깅** — 카카오 스킬 요청/응답을 일괄 기록. 평소 강조하는 *임팩트 측정·장애 감지* 지표와 직결.
+  - 방식: `OncePerRequestFilter` 또는 `HandlerInterceptor`로 **요청 1건당 한 줄**(utterance, botKey, botUserKey, 처리시간 ms, 응답요약) 구조화 로깅(JSON/MDC).
+  - 5초 타임아웃 대비 **응답시간(ms) 측정**을 같이 남겨 STEP 8의 "5초 내 응답 측정"도 함께 충족.
+  - 민감정보(식별자 원문)는 마스킹 고려.
+- [ ] **확인**: 두 명이 시도→정답→포기 시나리오를 돌린 뒤 DataGrip에서 `users`/`bot_users` row 생성·`score` 증가·`game.status` 전이 + 로그에 전체 요청 흔적 확인.
 
 #### 🎯 STEP 9-P. 정답 응답에 "상위 N%" 표기 (2026-06-23 추가)
 
