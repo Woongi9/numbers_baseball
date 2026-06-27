@@ -21,7 +21,7 @@ import java.time.LocalDateTime
 @Entity
 @Table(
     name = "game",
-    indexes = [Index(name = "idx_game_user_status", columnList = "userId,status")],
+    indexes = [Index(name = "idx_game_bot_key_status", columnList = "bot_key, status")],
 )
 class Game(
     @Column(nullable = false)

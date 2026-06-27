@@ -20,7 +20,10 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    runtimeOnly("com.h2database:h2")
+    // 운영/로컬 DB: MySQL (버전은 Spring Boot BOM이 관리)
+    runtimeOnly("com.mysql:mysql-connector-j")
+    // H2는 테스트(인메모리)에서만 사용 → 운영 JAR에 섞이지 않게 testRuntimeOnly
+    testRuntimeOnly("com.h2database:h2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.mockk:mockk:1.13.13")
     testImplementation(kotlin("test"))

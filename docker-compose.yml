@@ -1,0 +1,30 @@
+# 로컬 개발용 MySQL. 운영(RDS)과 동일하게 MySQL 8.0 + utf8mb4 사용.
+# 사용법:
+#   docker compose up -d     # 기동 (백그라운드)
+#   docker compose down      # 중지 (데이터는 볼륨에 유지)
+#   docker compose down -v   # 중지 + 데이터까지 삭제(초기화)
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: baseball-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: baseball
+      MYSQL_USER: baseball
+      MYSQL_PASSWORD: baseball
+      MYSQL_ROOT_PASSWORD: rootpw
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpw"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mysql-data:
