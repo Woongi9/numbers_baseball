@@ -327,7 +327,7 @@ src/main/resources/application.yml
 - [x] `MmrCalculator.gain(tries, difficulty)` 순수 함수 구현 — **미작성**
 - [x] `GameService`: 정답 시 score 산정 → `User`/`BotUser`에 누적 저장 — **연결 완료** (2026-06-29) `guess(userId, botKey, guess)` 승리 분기에서 `ScoreCalculator.gain` 산정 후 `UserService.accrue()`(getOrCreate + 같은 트랜잭션 누적). STEP 9-F 증상 2·3 동시 해소.
 - [x] 정답 응답 포맷에 `+획득 (이전 → 현재)` 표기 — **반영 완료** `formatGuess` 승리 메시지에 `+{gain}점 ({before} → {after})` 추가
-- [ ] 🆕 정답 응답에 **상위 N% (등수/전체)** 표기 — 아래 9-P 설계 참고 — **미반영** (다음 작업)
+- [x] 🆕 정답 응답에 **상위 N% (등수/전체)** 표기 — 9-P 구현 완료 (2026-06-29). 상세는 아래 9-P 체크리스트 참고
 - [x] **단위 테스트**: 적립 위임(`GameServiceTest`) + getOrCreate/누적/음수 거부(`UserServiceTest`) 작성 — *시도수별 획득량/최소보장/배수는 기존 `ScoreCalculatorTest`가 커버*
 - [ ] **확인**: 정답 맞춘 뒤 score 상승 + 응답 텍스트 검증 — *샌드박스는 JDK21·네트워크 부재로 `./gradlew test` 미실행. 로컬에서 실행 필요*
 
@@ -409,11 +409,11 @@ SELECT COUNT(*) FROM users;
 
 **범위(확정 필요)**: `이번달 총합 score`와 일관되게 **전체(글로벌 `User.score`) 기준**을 기본으로. 필요 시 **봇별(`BotUser.score`, STEP 10 인덱스 `(bot_key, score)` 재사용)** 추가 또는 동시 표기(`상위 5%(전체)·2%(이 방)`).
 
-- [ ] `UserRepository.countByScoreGreaterThan(score)` + `count()` (또는 전용 percentile 쿼리)
-- [ ] `users(score)` 인덱스 추가 (글로벌 기준 시)
-- [ ] 승리 응답 포맷에 `상위 N% (rank/total)` 합성 + 표본부족 분기
-- [ ] **단위 테스트**: 동점/1등/꼴찌/표본부족 경계값
-- [ ] **확인**: 정답 후 응답에 상위% 정상 표기
+- [x] `UserRepository.countByScoreGreaterThan(score)` + `count()` — 추가 완료 (2026-06-29)
+- [x] `users(score)` 인덱스 추가 (글로벌 기준) — `idx_users_score(scores)` 추가
+- [x] 승리 응답 포맷에 `상위 N% (rank/total)` 합성 + 표본부족 분기 — `PercentileCalculator.of(higher,total)`(표본부족 `total<MIN_SAMPLE(=5)` → null) → `UserService.percentileOf()` → `GuessOutcome.percentile` → 컨트롤러가 null이면 줄 생략. 적립과 같은 트랜잭션에서 계산.
+- [x] **단위 테스트**: `PercentileCalculatorTest`(1등/동점/꼴찌/올림/표본부족/경계/잘못된입력) + `UserServiceTest.percentileOf` + `GameServiceTest` 승리 위임
+- [ ] **확인**: 정답 후 응답에 상위% 정상 표기 — *샌드박스 JDK21·네트워크 부재로 `./gradlew test` 미실행. 로컬 검증 필요*
 
 ### 🟢 STEP 10. [고도화] 랭킹 조회 (현재 채팅방=botKey) ✅ 읽기 완료 (점수 적립 연결만 STEP 9 대기) — 2026-06-23 `feat/ranking`
 - [x] ⚠️ **선행 확인**: 채팅방 식별자 = `botKey`(=bot.id)로 결정 + `SkillRequest.bot.id` 파싱 추가 *(단, `appUserId`/`botUserKey` 전체 + 실제 카카오 JSON 로깅 검증은 STEP A로 이월)*

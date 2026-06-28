@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @DisplayName("UserService.accrue - 점수 적립(getOrCreate + 누적)")
 class UserServiceTest {
@@ -113,6 +114,33 @@ class UserServiceTest {
     fun rejectsNegativeGain() {
         assertThrows(IllegalArgumentException::class.java) {
             sut.accrue(appUserId = "app-1", botKey = null, botUserKey = "u1", gain = -1)
+        }
+    }
+
+    @Nested
+    @DisplayName("percentileOf - 전역 상위 백분위")
+    inner class PercentileOf {
+
+        @Test
+        @DisplayName("COUNT(score>my)·COUNT(*) 결과를 PercentileCalculator 규칙대로 매핑한다")
+        fun mapsCounts() {
+            every { userRepository.countByScoreGreaterThan(1065) } returns 4L // 나보다 위 4명
+            every { userRepository.count() } returns 100L
+
+            val p = sut.percentileOf(1065)!!
+
+            assertEquals(5, p.rank)        // 4 + 1
+            assertEquals(100, p.total)
+            assertEquals(5, p.topPercent)  // ceil(5*100/100)
+        }
+
+        @Test
+        @DisplayName("표본 부족(total < MIN_SAMPLE)이면 null")
+        fun tooFewSamplesIsNull() {
+            every { userRepository.countByScoreGreaterThan(any()) } returns 0L
+            every { userRepository.count() } returns 1L // 혼자
+
+            assertNull(sut.percentileOf(50))
         }
     }
 }

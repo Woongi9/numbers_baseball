@@ -151,17 +151,20 @@ class GameServiceTest {
         }
 
         @Test
-        @DisplayName("정답 시 시도수·난이도로 산정한 gain 을 UserService.accrue 로 적립 위임한다")
-        fun winDelegatesAccrual() {
+        @DisplayName("정답 시 gain 적립 위임 후 적립 점수로 상위% 조회 결과를 outcome 에 싣는다")
+        fun winDelegatesAccrualAndPercentile() {
             val game = playingGame("5273") // NORMAL, 1번에 정답 → gain = 95
-            // 적립 후 누적 점수를 1095 로 가정 → outcome 에 그대로 실려와야 한다.
+            // 적립 후 누적 점수를 1095 로 가정 → 그 점수로 percentileOf 가 조회되어야 한다.
             every { userService.accrue("u1", "bot-1", "u1", 95) } returns 1095
+            every { userService.percentileOf(1095) } returns Percentile(rank = 5, total = 100, topPercent = 5)
 
             val outcome = sut.guess(userId = "u1", botKey = "bot-1", guess = "5273")
 
             assertEquals(95, outcome.gain)
             assertEquals(1095, outcome.totalScore)
+            assertEquals(Percentile(5, 100, 5), outcome.percentile)
             verify(exactly = 1) { userService.accrue("u1", "bot-1", "u1", 95) }
+            verify(exactly = 1) { userService.percentileOf(1095) }
             confirmVerified(userService)
         }
 

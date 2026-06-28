@@ -19,6 +19,8 @@ data class GuessOutcome(
     val gain: Int = 0,
     /** 적립 후 전역 누적 점수(오답이면 0). 응답의 "이전 → 현재" 표기에 사용. */
     val totalScore: Int = 0,
+    /** 적립 후 전역 상위 백분위(오답이거나 표본 부족이면 null). */
+    val percentile: Percentile? = null,
 )
 
 @Service
@@ -61,15 +63,16 @@ class GameService(
             return GuessOutcome(result = result, tries = game.tries, finished = false)
         }
 
-        // 승리: 종료 → 시도수·난이도로 획득 점수 산정 → 전역/봇 누적 적립(같은 트랜잭션).
+        // 승리: 종료 → 시도수·난이도로 획득 점수 산정 → 전역/봇 누적 적립 → 같은 트랜잭션에서 상위% 조회.
         game.win()
         val gain = ScoreCalculator.gain(game.tries, game.gameDifficulty)
         val totalScore = userService.accrue(
             appUserId = userId, botKey = botKey, botUserKey = userId, gain = gain,
         )
+        val percentile = userService.percentileOf(totalScore) // 적립 후 점수 기준
         return GuessOutcome(
             result = result, tries = game.tries, finished = true,
-            gain = gain, totalScore = totalScore,
+            gain = gain, totalScore = totalScore, percentile = percentile,
         )
     }
 

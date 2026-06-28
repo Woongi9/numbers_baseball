@@ -69,11 +69,15 @@ class SkillController(
         return when {
             r.isWin -> {
                 val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
-                """
-                정답입니다! ${outcome.tries}번 만에 맞혔습니다.
-                +${outcome.gain}점 ($before → ${outcome.totalScore})
-                '시작'으로 다시 플레이하세요.
-                """.trimIndent()
+                buildString {
+                    appendLine("정답입니다! ${outcome.tries}번 만에 맞혔습니다.")
+                    appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
+                    // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
+                    outcome.percentile?.let {
+                        appendLine("🏅 이번 시즌 상위 ${it.topPercent}% (${it.rank}위 / ${it.total}명)")
+                    }
+                    append("'시작'으로 다시 플레이하세요.")
+                }
             }
             r.isOut -> "${outcome.tries}번째 시도: OUT (0S 0B)"
             else -> "${outcome.tries}번째 시도: ${r.strike}S ${r.ball}B"

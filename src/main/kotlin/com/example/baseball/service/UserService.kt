@@ -72,4 +72,24 @@ class UserService(
         }
         return user.score
     }
+
+    /**
+     * 전역(User.score) 기준 상위 백분위 조회(PLAN 9-P).
+     *
+     * 동작 순서:
+     *  1. higher = COUNT(scores > myScore)   // 나보다 위에 몇 명? (인덱스 범위 스캔, 동점 제외)
+     *  2. total  = COUNT(*)
+     *  3. PercentileCalculator.of(higher, total) → 표본 부족(total<MIN_SAMPLE)이면 null
+     *
+     * 적립과 같은 트랜잭션에서 호출해야 방금 올린 점수가 반영된다(guess()의 @Transactional 안에서 합류).
+     *
+     * @param myScore 적립 후 내 전역 누적 점수.
+     * @return 백분위 정보(표본 부족이면 null).
+     */
+    @Transactional(readOnly = true)
+    fun percentileOf(myScore: Int): Percentile? {
+        val higher = userRepository.countByScoreGreaterThan(myScore).toInt()
+        val total = userRepository.count().toInt()
+        return PercentileCalculator.of(higher = higher, total = total)
+    }
 }
