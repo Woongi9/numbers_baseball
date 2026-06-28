@@ -51,7 +51,7 @@ class SkillController(
                 utterance in RANKING_COMMANDS -> formatRanking(botKey)
 
                 utterance.isNotBlank() && utterance.all { it.isDigit() } -> {
-                    formatGuess(gameService.guess(userId, utterance))
+                    formatGuess(gameService.guess(userId, botKey, utterance))
                 }
 
                 else -> helpMessage()
@@ -67,7 +67,14 @@ class SkillController(
     private fun formatGuess(outcome: GuessOutcome): String {
         val r = outcome.result
         return when {
-            r.isWin -> "정답입니다! ${outcome.tries}번 만에 맞혔습니다. '시작'으로 다시 플레이하세요."
+            r.isWin -> {
+                val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
+                """
+                정답입니다! ${outcome.tries}번 만에 맞혔습니다.
+                +${outcome.gain}점 ($before → ${outcome.totalScore})
+                '시작'으로 다시 플레이하세요.
+                """.trimIndent()
+            }
             r.isOut -> "${outcome.tries}번째 시도: OUT (0S 0B)"
             else -> "${outcome.tries}번째 시도: ${r.strike}S ${r.ball}B"
         }

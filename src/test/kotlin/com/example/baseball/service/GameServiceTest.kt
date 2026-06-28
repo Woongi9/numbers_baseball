@@ -9,6 +9,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.confirmVerified
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -22,7 +23,9 @@ import kotlin.test.assertTrue
 class GameServiceTest {
 
     private val gameRepository = mockk<GameRepository>()
-    private val sut = GameService(gameRepository)
+    // 적립은 UserService 책임이므로 여기서는 호출 위임만 검증한다(상호작용 테스트).
+    private val userService = mockk<UserService>(relaxed = true)
+    private val sut = GameService(gameRepository, userService)
 
     private val botKey = "u1"
 
@@ -139,7 +142,7 @@ class GameServiceTest {
         fun correctGuessWins() {
             val game = playingGame("5273")
 
-            val outcome = sut.guess(botKey, "5273")
+            val outcome = sut.guess(botKey, botKey, "5273")
 
             assertTrue(outcome.result.isWin)
             assertTrue(outcome.finished)
@@ -148,16 +151,34 @@ class GameServiceTest {
         }
 
         @Test
-        @DisplayName("오답이면 PLAYING이 유지되고 시도 횟수만 증가한다")
+        @DisplayName("정답 시 시도수·난이도로 산정한 gain 을 UserService.accrue 로 적립 위임한다")
+        fun winDelegatesAccrual() {
+            val game = playingGame("5273") // NORMAL, 1번에 정답 → gain = 95
+            // 적립 후 누적 점수를 1095 로 가정 → outcome 에 그대로 실려와야 한다.
+            every { userService.accrue("u1", "bot-1", "u1", 95) } returns 1095
+
+            val outcome = sut.guess(userId = "u1", botKey = "bot-1", guess = "5273")
+
+            assertEquals(95, outcome.gain)
+            assertEquals(1095, outcome.totalScore)
+            verify(exactly = 1) { userService.accrue("u1", "bot-1", "u1", 95) }
+            confirmVerified(userService)
+        }
+
+        @Test
+        @DisplayName("오답이면 PLAYING 유지·시도수만 증가하고 적립은 호출되지 않는다(gain/totalScore=0)")
         fun wrongGuessContinues() {
             val game = playingGame("5273")
 
-            val outcome = sut.guess(botKey, "1289") // 1S 0B
+            val outcome = sut.guess(botKey, botKey, "1289") // 1S 0B
 
             assertFalse(outcome.result.isWin)
             assertFalse(outcome.finished)
             assertEquals(1, outcome.tries)
             assertEquals(GameStatus.PLAYING, game.status)
+            assertEquals(0, outcome.gain)
+            assertEquals(0, outcome.totalScore)
+            verify(exactly = 0) { userService.accrue(any(), any(), any(), any()) }
         }
 
         @Test
@@ -165,7 +186,7 @@ class GameServiceTest {
         fun noGameThrows() {
             noPlayingGame()
             assertThrows(IllegalStateException::class.java) {
-                sut.guess(botKey, "1234")
+                sut.guess(botKey, botKey, "1234")
             }
         }
 
@@ -175,7 +196,7 @@ class GameServiceTest {
             val game = playingGame("5273")
 
             assertThrows(IllegalArgumentException::class.java) {
-                sut.guess(botKey, "5523") // 중복 숫자
+                sut.guess(botKey, botKey, "5523") // 중복 숫자
             }
             assertEquals(0, game.tries) // 검증 실패 → recordTry 도달 X
             assertEquals(GameStatus.PLAYING, game.status)

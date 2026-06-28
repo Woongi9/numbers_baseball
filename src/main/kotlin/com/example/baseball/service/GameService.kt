@@ -7,16 +7,24 @@ import com.example.baseball.domain.game.GameStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/** 추측 1회의 결과(컨트롤러가 응답 메시지를 만들 때 사용). */
+/**
+ * 추측 1회의 결과(컨트롤러가 응답 메시지를 만들 때 사용).
+ * gain/totalScore 는 승리(win) 시에만 채워지고, 오답/오류 시에는 0 으로 둔다.
+ */
 data class GuessOutcome(
     val result: JudgeResult,
     val tries: Int,
     val finished: Boolean,
+    /** 이번 승리로 획득한 점수(오답이면 0). */
+    val gain: Int = 0,
+    /** 적립 후 전역 누적 점수(오답이면 0). 응답의 "이전 → 현재" 표기에 사용. */
+    val totalScore: Int = 0,
 )
 
 @Service
 class GameService(
     private val gameRepository: GameRepository,
+    private val userService: UserService,
 ) {
     /**
      * 새 게임 시작. 진행 중인 게임이 있으면 포기 처리하여
@@ -33,20 +41,36 @@ class GameService(
 
     /**
      * 추측 처리. 진행 중 게임을 찾아 판정하고 상태를 갱신한다.
+     * 승리 시 같은 트랜잭션에서 score 를 산정·적립하여 게임 종료와 점수 적립을 원자적으로 커밋한다.
+     *
+     * @param userId  카카오 user.id. 게임 세션 키이자 전역 식별자(appUserId)·봇 내 식별자(botUserKey)로 함께 쓴다.
+     * @param botKey  봇(채팅방) 식별자. null 이면 채팅방 랭킹용 BotUser 적립은 생략하고 전역 점수만 적립한다.
      * @throws IllegalStateException 진행 중인 게임이 없을 때
      * @throws IllegalArgumentException 입력이 규칙에 맞지 않을 때(BaseballJudge가 검증)
      */
     @Transactional
-    fun guess(userId: String, guess: String): GuessOutcome {
+    fun guess(userId: String, botKey: String?, guess: String): GuessOutcome {
         val game = currentGame(userId)
 
         // 검증 실패 시 여기서 예외 → 시도 횟수는 증가하지 않는다(잘못된 입력은 차감 안 함).
         val result = BaseballJudge.judge(game.answer, guess)
 
         game.recordTry()
-        if (result.isWin) game.win()
 
-        return GuessOutcome(result = result, tries = game.tries, finished = !game.isPlaying)
+        if (!result.isWin) {
+            return GuessOutcome(result = result, tries = game.tries, finished = false)
+        }
+
+        // 승리: 종료 → 시도수·난이도로 획득 점수 산정 → 전역/봇 누적 적립(같은 트랜잭션).
+        game.win()
+        val gain = ScoreCalculator.gain(game.tries, game.gameDifficulty)
+        val totalScore = userService.accrue(
+            appUserId = userId, botKey = botKey, botUserKey = userId, gain = gain,
+        )
+        return GuessOutcome(
+            result = result, tries = game.tries, finished = true,
+            gain = gain, totalScore = totalScore,
+        )
     }
 
     /** 포기. 정답을 반환한다. */

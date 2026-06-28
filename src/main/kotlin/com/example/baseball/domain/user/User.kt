@@ -3,9 +3,13 @@ package com.example.baseball.domain.user
 import jakarta.persistence.*
 
 @Entity
-@Table(name = "users")
+@Table(
+    name = "users",
+    // 전역 식별자(appUserId)는 유저당 1행이어야 한다. getOrCreate 동시성(중복 INSERT)의 DB 최종 방어선.
+    uniqueConstraints = [UniqueConstraint(name = "uk_users_app_user_id", columnNames = ["app_user_id"])],
+)
 class User (
-    @Column(name = "app_user_id")
+    @Column(name = "app_user_id", nullable = false)
     val appUserId: String,
     ) {
     @Id
