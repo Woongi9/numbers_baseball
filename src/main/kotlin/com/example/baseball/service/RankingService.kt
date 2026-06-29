@@ -40,5 +40,5 @@ class RankingService(
      */
     private fun maskKey(botUserKey: String): String =
         if (botUserKey.length <= 4) botUserKey
-        else botUserKey.take(4) + "…"
+        else botUserKey
 }

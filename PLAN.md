@@ -339,8 +339,8 @@ src/main/resources/application.yml
 
 **🔴 중요 (반드시 수정)**
 
-- [ ] **(증상 2) 시도 시 `User`/`BotUser`가 자동 저장 안 됨** — 첫 추측(또는 게임 시작) 시점에 해당 유저(`User`=appUserId, `BotUser`=botKey+botUserKey)가 없으면 **생성(upsert)**되어야 하는데 현재 안 만들어짐. → STEP C의 "없으면 생성" 로직이 비어 있는 것. **getOrCreate** 형태로 연결 필요.
-- [ ] **(증상 3) 정답 시 `User` 저장·`score` 증가 안 됨** — 4S(win) 분기에서 `gain` 산정 후 `User.score += gain`, `BotUser.score += gain` 저장이 누락. 현재 `guess()`는 `game.win()`만 호출하고 점수 적립을 안 함(= STEP C 핵심 공백). **승리 분기에 적립 연결 + 같은 트랜잭션 저장**.
+- [x] **(증상 2) 시도 시 `User`/`BotUser`가 자동 저장 안 됨** — **해소 완료 (2026-06-29)**. `startGame(userId, botKey)` 시작 시점에 `UserService.register(appUserId, botKey, botUserKey)` 로 점수 변동 없이 행만 getOrCreate → 점수 없는 참여자도 추적. `register`/`accrue`가 `getOrCreateUser`/`getOrCreateBotUser` 사설 헬퍼를 공유(중복 제거). ⚠️ 부수효과: 봇에서 게임 시작 시 score=0 BotUser가 랭킹 목록 하단에 노출됨(참여자 표시 관점에선 의도와 일치).
+- [x] **(증상 3) 정답 시 `User` 저장·`score` 증가 안 됨** — **해소 완료 (STEP C, 2026-06-29)**. 4S(win) 분기에서 `ScoreCalculator.gain` 산정 후 `UserService.accrue` 로 `User.score`·`BotUser.score += gain`(같은 트랜잭션).
 
 **🟡 경고 (수정 권장)**
 

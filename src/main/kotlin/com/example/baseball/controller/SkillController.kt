@@ -39,7 +39,7 @@ class SkillController(
         try {
             when {
                 utterance in START_COMMANDS -> {
-                    gameService.startGame(userId)
+                    gameService.startGame(userId, botKey)
                     "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
                 }
 

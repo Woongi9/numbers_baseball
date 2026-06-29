@@ -31,13 +31,24 @@ class GameService(
     /**
      * 새 게임 시작. 진행 중인 게임이 있으면 포기 처리하여
      * "유저당 진행중 게임은 항상 1건" 불변식을 지킨다.
+     *
+     * 시작 시점에 참가자(User/BotUser) 행을 미리 보장한다(PLAN 9-F 증상 2):
+     * 승리해야만 행이 생기던 문제를 막아, 점수 없는 참여자도 추적된다.
+     *
+     * @param userId 카카오 user.id. 게임 세션 키이자 전역 식별자(appUserId)·봇 내 식별자(botUserKey)로 함께 쓴다.
+     * @param botKey 봇(채팅방) 식별자. null 이면 채팅방용 BotUser 등록은 생략하고 전역 User 만 보장한다.
      */
     @Transactional
-    fun startGame(botKey: String, gameDifficulty: GameDifficulty = GameDifficulty.NORMAL): Game {
-        gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)?.giveUp()
+    fun startGame(
+        userId: String,
+        botKey: String? = null,
+        gameDifficulty: GameDifficulty = GameDifficulty.NORMAL,
+    ): Game {
+        userService.register(appUserId = userId, botKey = botKey, botUserKey = userId)
+        gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)?.giveUp()
         val answer = generateAnswer(gameDifficulty)
         return gameRepository.save(
-            Game(botKey = botKey, answer = answer, gameDifficulty = gameDifficulty)
+            Game(botKey = userId, answer = answer, gameDifficulty = gameDifficulty)
         )
     }
 

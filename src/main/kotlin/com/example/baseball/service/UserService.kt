@@ -61,17 +61,40 @@ class UserService(
     fun accrue(appUserId: String, botKey: String?, botUserKey: String, gain: Int): Int {
         require(gain >= 0) { "gain 은 0 이상이어야 합니다. (입력: $gain)" }
 
-        val user = userRepository.findByAppUserId(appUserId)
-            ?: userRepository.save(User(appUserId = appUserId))
+        val user = getOrCreateUser(appUserId)
         user.score += gain
 
         if (botKey != null) {
-            val botUser = botUserRepository.findByBotKeyAndBotUserKey(botKey, botUserKey)
-                ?: botUserRepository.save(BotUser(user = user, botUserKey = botUserKey, botKey = botKey))
-            botUser.score += gain
+            getOrCreateBotUser(user, botKey, botUserKey).score += gain
         }
         return user.score
     }
+
+    /**
+     * 게임 시작 시점에 참가자(User/BotUser) 행만 보장한다(점수 변동 없음, PLAN 9-F 증상 2).
+     *
+     * 승리해야만 행이 생기던 문제를 막아, 아직 점수가 없는 참여자도 추적·집계에 포함시킨다.
+     * `accrue` 와 동일한 getOrCreate 헬퍼를 공유하므로 생성 규칙(키·중복 방어선)이 한 곳에서 관리된다.
+     *
+     * @param botKey null 이면 채팅방 식별 불가 → 전역 User 만 보장한다.
+     */
+    @Transactional
+    fun register(appUserId: String, botKey: String?, botUserKey: String) {
+        val user = getOrCreateUser(appUserId)
+        if (botKey != null) {
+            getOrCreateBotUser(user, botKey, botUserKey)
+        }
+    }
+
+    /** 전역 유저 조회, 없으면 생성. UNIQUE(app_user_id) 가 동시성 중복의 최종 방어선. */
+    private fun getOrCreateUser(appUserId: String): User =
+        userRepository.findByAppUserId(appUserId)
+            ?: userRepository.save(User(appUserId = appUserId))
+
+    /** 봇 내 유저 조회, 없으면 생성. UNIQUE(bot_key, bot_user_key) 가 동시성 중복의 최종 방어선. */
+    private fun getOrCreateBotUser(user: User, botKey: String, botUserKey: String): BotUser =
+        botUserRepository.findByBotKeyAndBotUserKey(botKey, botUserKey)
+            ?: botUserRepository.save(BotUser(user = user, botUserKey = botUserKey, botKey = botKey))
 
     /**
      * 전역(User.score) 기준 상위 백분위 조회(PLAN 9-P).

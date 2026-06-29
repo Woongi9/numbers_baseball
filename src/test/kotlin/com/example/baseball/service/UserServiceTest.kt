@@ -118,6 +118,57 @@ class UserServiceTest {
     }
 
     @Nested
+    @DisplayName("register - 시작 시 참가자 행 보장(점수 변동 없음)")
+    inner class Register {
+
+        @Test
+        @DisplayName("없으면 User·BotUser 를 score 0 으로 생성한다")
+        fun createsBothWhenMissing() {
+            every { userRepository.findByAppUserId("app-1") } returns null
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns null
+            val savedUser = slot<User>()
+            val savedBot = slot<BotUser>()
+            every { userRepository.save(capture(savedUser)) } answers { savedUser.captured }
+            every { botUserRepository.save(capture(savedBot)) } answers { savedBot.captured }
+
+            sut.register(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1")
+
+            assertEquals("app-1", savedUser.captured.appUserId)
+            assertEquals(0, savedUser.captured.score) // 점수 변동 없음
+            assertEquals("bot-1", savedBot.captured.botKey)
+            assertEquals(0, savedBot.captured.score)
+        }
+
+        @Test
+        @DisplayName("이미 있으면 생성하지 않고 점수도 그대로 둔다")
+        fun noCreateWhenExisting() {
+            val user = User(appUserId = "app-1").apply { score = 500 }
+            val botUser = BotUser(user = user, botUserKey = "u1", botKey = "bot-1", score = 300)
+            every { userRepository.findByAppUserId("app-1") } returns user
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
+
+            sut.register(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1")
+
+            assertEquals(500, user.score)   // 변동 없음
+            assertEquals(300, botUser.score)
+            verify(exactly = 0) { userRepository.save(any()) }
+            verify(exactly = 0) { botUserRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("botKey 가 null 이면 전역 User 만 보장한다")
+        fun globalOnlyWhenNoBotKey() {
+            every { userRepository.findByAppUserId("app-1") } returns null
+            every { userRepository.save(any()) } answers { firstArg() }
+
+            sut.register(appUserId = "app-1", botKey = null, botUserKey = "u1")
+
+            verify(exactly = 0) { botUserRepository.findByBotKeyAndBotUserKey(any(), any()) }
+            verify(exactly = 0) { botUserRepository.save(any()) }
+        }
+    }
+
+    @Nested
     @DisplayName("percentileOf - 전역 상위 백분위")
     inner class PercentileOf {
 

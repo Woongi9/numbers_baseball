@@ -64,7 +64,7 @@ class GameServiceTest {
             noPlayingGame()
             val slot = captureSave()
 
-            val returned = sut.startGame(botKey, GameDifficulty.NORMAL)
+            val returned = sut.startGame(botKey, gameDifficulty = GameDifficulty.NORMAL)
 
             val saved = slot.captured
             assertEquals(returned, saved)                          // 저장한 엔티티를 그대로 반환
@@ -81,12 +81,35 @@ class GameServiceTest {
         }
 
         @Test
+        @DisplayName("시작 시 참가자(User/BotUser)를 register 로 미리 보장한다 (9-F 증상 2)")
+        fun registersParticipantOnStart() {
+            noPlayingGame()
+            captureSave()
+
+            sut.startGame(userId = "u1", botKey = "bot-1")
+
+            // userId 를 appUserId·botUserKey 로 함께 전달해 행만 보장(점수 변동 없음).
+            verify(exactly = 1) { userService.register("u1", "bot-1", "u1") }
+        }
+
+        @Test
+        @DisplayName("botKey 가 없으면 register 에 null 을 넘겨 전역 User 만 보장한다")
+        fun registersGlobalOnlyWhenNoBotKey() {
+            noPlayingGame()
+            captureSave()
+
+            sut.startGame(userId = "u1")
+
+            verify(exactly = 1) { userService.register("u1", null, "u1") }
+        }
+
+        @Test
         @DisplayName("HARD: 0~9+a~e 기호 4자리·score=200 게임을 저장한다")
         fun createsHardGame() {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(botKey, GameDifficulty.HARD)
+            sut.startGame(botKey, gameDifficulty = GameDifficulty.HARD)
 
             val saved = slot.captured
             assertEquals(GameDifficulty.HARD, saved.gameDifficulty)
@@ -105,7 +128,7 @@ class GameServiceTest {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(botKey, GameDifficulty.EASY)
+            sut.startGame(botKey, gameDifficulty = GameDifficulty.EASY)
 
             val saved = slot.captured
             assertEquals(GameDifficulty.EASY, saved.gameDifficulty)
@@ -123,7 +146,7 @@ class GameServiceTest {
             val existing = playingGame("1234")
             val slot = captureSave()
 
-            sut.startGame(botKey, GameDifficulty.NORMAL)
+            sut.startGame(botKey, gameDifficulty = GameDifficulty.NORMAL)
 
             val saved = slot.captured
             assertEquals(GameStatus.GIVEUP, existing.status)       // 기존 게임 종료
