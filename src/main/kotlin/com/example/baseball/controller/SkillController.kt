@@ -34,34 +34,28 @@ class SkillController(
         return SkillResponse.text(handle(userId, botKey, utterance))
     }
 
-    /** utterance를 명령어/숫자로 분기. 사용자 입력 오류는 안내 메시지로 변환(500 대신 정상 응답). */
+    /**
+     * utterance를 명령으로 분기한다.
+     * 입력 규칙 위반·진행중 게임 없음 등은 예외로 던지고, SkillExceptionHandler 가 안내 메시지로 변환한다.
+     * (예외를 여기서 삼키지 않아야 LogTraceAspect 가 실패를 관측할 수 있다 — 9-F 증상 4)
+     */
     private fun handle(userId: String, botKey: String?, utterance: String): String =
-        try {
-            when {
-                utterance in START_COMMANDS -> {
-                    gameService.startGame(userId, botKey)
-                    "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
-                }
-
-                utterance == GIVEUP_COMMAND -> {
-                    val answer = gameService.giveUp(userId)
-                    "게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요."
-                }
-
-                utterance in RANKING_COMMANDS -> formatRanking(botKey)
-
-                utterance.isNotBlank() && utterance.all { it.isDigit() } -> {
-                    formatGuess(gameService.guess(userId, botKey, utterance))
-                }
-
-                else -> helpMessage()
+        when (SkillCommand.classify(utterance)) {
+            SkillCommand.START -> {
+                gameService.startGame(userId, botKey)
+                "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
             }
-        } catch (e: IllegalStateException) {
-            // 진행 중 게임 없음 등
-            e.message ?: "게임 상태를 확인할 수 없습니다."
-        } catch (e: IllegalArgumentException) {
-            // 자릿수/중복/숫자 외 문자 등 입력 규칙 위반
-            e.message ?: "입력이 올바르지 않습니다."
+
+            SkillCommand.GIVEUP -> {
+                val answer = gameService.giveUp(userId)
+                "게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요."
+            }
+
+            SkillCommand.RANKING -> formatRanking(botKey)
+
+            SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
+
+            SkillCommand.HELP -> helpMessage()
         }
 
     private fun formatGuess(outcome: GuessOutcome): String {
@@ -109,10 +103,4 @@ class SkillController(
         - '포기' : 정답 공개
         - '랭킹' : 이 채팅방 점수 순위
         """.trimIndent()
-
-    companion object {
-        private val START_COMMANDS = setOf("시작", "새게임", "시작하기")
-        private const val GIVEUP_COMMAND = "포기"
-        private val RANKING_COMMANDS = setOf("랭킹", "봇랭킹", "순위")
-    }
 }

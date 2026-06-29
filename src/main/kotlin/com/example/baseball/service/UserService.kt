@@ -1,9 +1,12 @@
 package com.example.baseball.service
 
+import com.example.baseball.common.TraceKeys
 import com.example.baseball.domain.user.BotUser
 import com.example.baseball.domain.user.BotUserRepository
 import com.example.baseball.domain.user.User
 import com.example.baseball.domain.user.UserRepository
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -23,6 +26,8 @@ class UserService(
     private val userRepository: UserRepository,
     private val botUserRepository: BotUserRepository,
 ) {
+
+    private val log = LoggerFactory.getLogger(UserService::class.java)
 
     @Transactional
     fun getScoresByBotKey(botKey: String): List<ScoreOutcomeByBot> {
@@ -86,10 +91,19 @@ class UserService(
         }
     }
 
-    /** 전역 유저 조회, 없으면 생성. UNIQUE(app_user_id) 가 동시성 중복의 최종 방어선. */
+    /**
+     * 전역 유저 조회, 없으면 생성. UNIQUE(app_user_id) 가 동시성 중복의 최종 방어선.
+     * 신규 생성 시 가입/유입 추적용 new_user 이벤트를 traceId 와 함께 남긴다(임팩트 측정).
+     */
     private fun getOrCreateUser(appUserId: String): User =
         userRepository.findByAppUserId(appUserId)
-            ?: userRepository.save(User(appUserId = appUserId))
+            ?: userRepository.save(User(appUserId = appUserId)).also {
+                log.info(
+                    "evt=new_user traceId={} appUserId={}",
+                    MDC.get(TraceKeys.TRACE_ID),
+                    appUserId,
+                )
+            }
 
     /** 봇 내 유저 조회, 없으면 생성. UNIQUE(bot_key, bot_user_key) 가 동시성 중복의 최종 방어선. */
     private fun getOrCreateBotUser(user: User, botKey: String, botUserKey: String): BotUser =

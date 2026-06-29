@@ -350,10 +350,12 @@ src/main/resources/application.yml
 
 **🟢 제안 (운영 관측성)**
 
-- [ ] **(증상 4) 모든 요청 로깅** — 카카오 스킬 요청/응답을 일괄 기록. 평소 강조하는 *임팩트 측정·장애 감지* 지표와 직결.
-  - 방식: `OncePerRequestFilter` 또는 `HandlerInterceptor`로 **요청 1건당 한 줄**(utterance, botKey, botUserKey, 처리시간 ms, 응답요약) 구조화 로깅(JSON/MDC).
-  - 5초 타임아웃 대비 **응답시간(ms) 측정**을 같이 남겨 STEP 8의 "5초 내 응답 측정"도 함께 충족.
-  - 민감정보(식별자 원문)는 마스킹 고려.
+- [x] **(증상 4) 모든 요청 로깅** — **구현 완료 (2026-06-29, AOP 방식)**. `LogTraceAspect`(@Around on `SkillController.play`)가 요청 1건당 한 줄(traceId·src(botKey)·user(마스킹)·intent·utterance·status·elapsedMs·slow·result) 구조화 로깅 + MDC. 응답시간은 `finally`에서 측정(예외 시도 남김), 5초 대비 `SLOW_THRESHOLD_MS=3000` 초과면 WARN.
+  - **AOP가 실패를 관측하도록 예외 처리 재설계(B안)**: 컨트롤러 try/catch 제거 → `SkillExceptionHandler(@RestControllerAdvice, assignableTypes=SkillController)`가 `IllegalState/IllegalArgument`를 200 안내로 변환. aspect는 예외를 ERROR 로깅 후 **재던짐**.
+  - **분류 단일화**: 발화 분기를 `SkillCommand.classify`로 추출해 컨트롤러 `when`과 로그 intent가 같은 규칙 사용(중복 제거).
+  - **마스킹 공용화**: `Masking`(공용) 추출, RankingService도 재사용. MDC 키는 `TraceKeys`로 공유(패키지 순환 방지).
+  - **신규유저 추적**: `UserService.getOrCreateUser` 신규 생성 시 `evt=new_user`(traceId 상관) INFO 로깅(임팩트 측정).
+  - 의존성: `spring-boot-starter-aop` 추가.
 - [ ] **확인**: 두 명이 시도→정답→포기 시나리오를 돌린 뒤 DataGrip에서 `users`/`bot_users` row 생성·`score` 증가·`game.status` 전이 + 로그에 전체 요청 흔적 확인.
 
 #### 🎯 STEP 9-P. 정답 응답에 "상위 N%" 표기 (2026-06-23 추가)

@@ -29,16 +29,9 @@ class RankingService(
             .mapIndexed { index, botUser ->
                 RankEntry(
                     rank = index + 1,
-                    label = maskKey(botUser.botUserKey),
+                    // 닉네임 컬럼 도입(STEP 9/A) 전까지 카카오 키를 그대로 라벨로 쓴다.
+                    label = botUser.botUserKey,
                     score = botUser.score,
                 )
             }
-
-    /**
-     * 닉네임 컬럼이 아직 없어 카카오 사용자 키를 그대로 노출하지 않도록 마스킹한다.
-     * 닉네임 도입(STEP 9/A) 후 이 부분만 nickname 으로 교체하면 된다.
-     */
-    private fun maskKey(botUserKey: String): String =
-        if (botUserKey.length <= 4) botUserKey
-        else botUserKey
 }

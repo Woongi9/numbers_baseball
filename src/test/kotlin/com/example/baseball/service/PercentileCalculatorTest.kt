@@ -43,12 +43,11 @@ class PercentileCalculatorTest {
         }
 
         @Test
-        @DisplayName("동점자는 strictly-greater 라 같은 등수로 묶인다(공동순위)")
+        @DisplayName("동점자는 strictly-greater 라 같은 %, 등수로 묶인다")
         fun ties() {
-            // 최고점 동점 유저들: 서로의 점수가 '더 높지' 않으므로 각자 higher=0 → 모두 1위.
             val p = PercentileCalculator.of(higher = 0, total = 10)!!
             assertEquals(1, p.rank)
-            assertEquals(1, p.topPercent)
+            assertEquals(10, p.topPercent)
         }
 
         @Test
