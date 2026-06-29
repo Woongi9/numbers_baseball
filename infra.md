@@ -68,14 +68,114 @@
 
 ---
 
-## 5. 배포 절차 (요약)
+## 5. 배포
+
+### 5-1. 최초 수동 배포 (요약)
 
 1. RDS(`db.t4g.micro`, MySQL, Single-AZ) 생성 → 스키마/계정 준비, 자동 백업(보존 7일 권장) 확인.
 2. EC2(`t4g.small`, ARM AMI) 생성 + **EIP 연결** + 보안그룹.
-3. JDK 21(ARM) 설치, `baseball.jar` 배포, `systemd`(`baseball.service`)로 상시 가동(기존 OCI 구성 재사용).
+3. JDK 21(ARM) 설치, `baseball.jar` 배포(`/home/ubuntu/baseball.jar`), `systemd`(`baseball.service`)로 상시 가동(기존 OCI 구성 재사용).
 4. 운영 프로파일에서 DB 접속을 RDS 엔드포인트로 설정(`-Dspring.profiles.active`/프로파일별 yml).
 5. Nginx 443→localhost:8080 프록시 + 인증서, 도메인 A레코드 → EIP.
 6. `POST https://<도메인>/skill/play` 헬스 점검 → 카카오 오픈빌더 스킬 URL 연결.
+
+> 이후 코드 변경 배포는 5-2의 GitHub Actions로 자동화한다(수동 빌드/업로드 반복 제거).
+
+### 5-2. GitHub Actions 자동 배포 (CI/CD)
+
+단일 EC2 + systemd 구성이라 **SSH 기반 배포**가 가장 단순하고 적합하다(ALB·ASG·CodeDeploy 불필요).
+
+```
+push(main) → [GitHub Actions Runner: ubuntu-latest]
+  1. checkout
+  2. JDK 21 셋업(+ Gradle 캐시)
+  3. ./gradlew clean test bootJar   # 테스트 통과해야 다음 단계 진행(품질 게이트)
+  4. scp baseball.jar → EC2 스테이징 디렉터리
+  5. ssh: 기존 jar 백업 → 교체 → systemctl restart → 헬스체크
+                                         └ 실패 시 백업으로 롤백 + 잡 실패
+```
+
+**핵심 설계 포인트**
+
+- **JAR은 JVM 바이트코드 → 러너 아키텍처 무관.** 표준 `ubuntu-latest`(x86)에서 빌드해도 EC2 ARM에서 그대로 실행된다(ARM 크로스컴파일 불필요). 네이티브 이미지가 아니라서 가능.
+- **테스트를 CI에서 실행(품질 게이트).** 테스트는 H2 인메모리라 외부 DB 없이 러너에서 단독 통과 → 깨진 코드는 배포되지 않는다.
+- **비밀 분리.** DB 접속정보 등은 **서버 프로파일에만** 둔다. CI에는 SSH 접속용 비밀만 보관(코드/CI에 DB 비밀 노출 금지).
+- **다운타임/롤백.** 단일 인스턴스라 재시작 = 수 초 다운타임. 배포 후 **헬스체크로 검증**하고, 실패하면 **이전 jar로 롤백**한다(장애 조기 차단·재발 방지). 무중단이 필요해지면 ALB+ASG 블루/그린으로 확장(추후).
+- **헬스체크 엔드포인트.** `spring-boot-starter-actuator`를 추가하고 `management.endpoints.web.exposure.include=health`로 `/actuator/health`를 노출하면 깔끔하다(추후 Micrometer 메트릭 노출에도 재사용). 액추에이터를 안 쓰면 `/skill/play`에 도움말 발화 POST로 200을 확인한다.
+
+**GitHub Secrets** (Settings → Secrets and variables → Actions)
+
+| 이름 | 용도 |
+|------|------|
+| `EC2_HOST` | EIP 또는 도메인 |
+| `EC2_USER` | 접속 계정(예: `ubuntu`) |
+| `EC2_SSH_KEY` | **배포 전용** SSH 개인키(PEM). 개인 키 재사용 금지 |
+
+**워크플로** — `.github/workflows/deploy.yml`
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:        # 콘솔에서 수동 실행도 허용
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle      # 빌드 속도 개선
+
+      - name: Test & Build
+        run: |
+          chmod +x gradlew
+          ./gradlew clean test bootJar   # 테스트 실패 시 여기서 배포 중단
+
+      - name: Upload JAR to EC2 (staging)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: build/libs/baseball.jar
+          target: /home/ubuntu/deploy/      # 스테이징 경로
+          strip_components: 2               # build/libs 제거 → baseball.jar 만 업로드
+
+      - name: Swap, restart, health-check (with rollback)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu
+            cp -f baseball.jar baseball.jar.bak 2>/dev/null || true   # 현재본 백업
+            mv -f deploy/baseball.jar baseball.jar                    # 새 버전 교체
+            sudo systemctl restart baseball
+            sleep 5
+            if ! curl -fsS http://localhost:8080/actuator/health; then
+              echo "health check failed → rollback"
+              mv -f baseball.jar.bak baseball.jar
+              sudo systemctl restart baseball
+              exit 1
+            fi
+            echo "deploy ok"
+```
+
+> `systemctl restart baseball`을 비밀번호 없이 쓰려면 배포 계정에 sudoers `NOPASSWD` 한정 권한(해당 명령만)을 부여한다.
+
+**더 안전한 대안 (추후) — SSH 포트 없이 배포**
+
+GitHub Actions 러너는 IP가 유동적이라 보안그룹 22번을 좁히기 어렵다. 보안을 더 높이려면 **AWS SSM Session Manager**로 전환한다: `aws-actions/configure-aws-credentials`(OIDC, 장기 키 불필요) + `aws ssm send-command`로 EC2에 배포 명령을 보내면 **22번 포트를 아예 닫을 수 있다.** 초기엔 SSH로 시작하고, 운영 안정화 단계에서 SSM/OIDC로 옮기는 것을 권장.
 
 ---
 
