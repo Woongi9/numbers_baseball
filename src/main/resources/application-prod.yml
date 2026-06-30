@@ -27,7 +27,7 @@ spring:
   jpa:
     hibernate:
       # 최초 1회 스키마 생성이 필요하면 잠깐 update 로 올린 뒤, 안정화되면 validate 로 고정 권장.
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false                  # 운영 로그 노이즈/오버헤드 제거
     properties:
       hibernate:
