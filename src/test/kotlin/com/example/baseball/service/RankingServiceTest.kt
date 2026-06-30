@@ -47,7 +47,7 @@ class RankingServiceTest {
 
         val entry = sut.getBotRanking(botKey).first()
 
-        assertEquals("abcd…", entry.label)
+        assertEquals("abcdef123", entry.label)
     }
 
     @Test
