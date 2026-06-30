@@ -44,7 +44,12 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-**/src/main/resources-env/
+# 환경별 설정(resources-env)은 기본 무시. 단, 로컬 개발용 application.yml 만 예외로 추적.
+#   - 디렉터리(`/`)가 아니라 내용(`/**`)을 무시해야 아래 ! 예외가 동작한다.
+#   - 운영 비밀은 resources-env 가 아니라 서버 baseball.env 로 주입 → 여기 노출 없음.
+src/main/resources-env/**
+!src/main/resources-env/local/
+!src/main/resources-env/local/application.yml
 
 .idea/
 # H2 file DB
@@ -52,3 +57,10 @@ bin/
 *.mv.db
 *.trace.db
 .idea/
+
+### Secrets (절대 커밋 금지) — 예시(.example)만 추적
+baseball.env
+deploy/baseball.env
+*.pem
+deploy_key
+deploy_key.pub

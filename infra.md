@@ -83,24 +83,40 @@
 
 ### 5-2. GitHub Actions 자동 배포 (CI/CD)
 
-단일 EC2 + systemd 구성이라 **SSH 기반 배포**가 가장 단순하고 적합하다(ALB·ASG·CodeDeploy 불필요).
+단일 EC2 구성이라 **SSH 기반 배포**가 가장 단순하고 적합하다(ALB·ASG·CodeDeploy 불필요).
+방식은 기존 GCP 배포에서 쓰던 **`stop.sh` → `start.sh` 스크립트 흐름**을 그대로 가져오되, 프로세스 관리는 `nohup` 대신 **systemd 에 위임**한다.
+→ 배포 절차는 익숙한 스크립트 흐름을 유지하면서, **크래시 자동재시작·서버 재부팅 시 자동기동**은 systemd 가 보장한다(`nohup` 단독 방식의 약점 보완).
 
 ```
 push(main) → [GitHub Actions Runner: ubuntu-latest]
   1. checkout
   2. JDK 21 셋업(+ Gradle 캐시)
-  3. ./gradlew clean test bootJar   # 테스트 통과해야 다음 단계 진행(품질 게이트)
-  4. scp baseball.jar → EC2 스테이징 디렉터리
-  5. ssh: 기존 jar 백업 → 교체 → systemctl restart → 헬스체크
-                                         └ 실패 시 백업으로 롤백 + 잡 실패
+  3. ./gradlew clean test bootJar -Pprofile=prod   # 테스트 통과해야 진행(품질 게이트)
+  4. scp  deploy/scripts/*.sh   → EC2 /home/ubuntu/scripts   (배포 스크립트)
+  5. scp  build/libs/baseball.jar → EC2 /home/ubuntu/deploy  (스테이징 JAR)
+  6. ssh: stop.sh → (sleep 5) → start.sh
+            └ start.sh: 백업 → JAR 교체 → systemctl start → 헬스체크
+                                                  └ 실패 시 백업 JAR 으로 롤백 + 잡 실패
 ```
+
+**서버 디렉터리 레이아웃** (EC2 `/home/ubuntu`)
+
+| 경로 | 용도 |
+|------|------|
+| `scripts/stop.sh`, `scripts/start.sh` | 배포 스크립트(매 배포 시 scp 로 갱신) |
+| `deploy/baseball.jar` | scp 로 올라온 **스테이징** JAR |
+| `baseball.jar` | systemd 가 실행하는 **운영** JAR |
+| `baseball.jar.bak` | 직전 운영본(롤백용) |
+| `baseball.env` | DB 비밀 등 환경변수(권한 600, **CI 에 노출 안 함**) |
+| `logs/deploy.log` | 배포 단계 로그(stop/start/롤백 기록) |
 
 **핵심 설계 포인트**
 
+- **익숙한 stop/start 스크립트 흐름 유지 + systemd 위임.** `stop.sh`는 `systemctl stop`, `start.sh`는 JAR 교체 후 `systemctl start`만 호출한다. 배포 절차는 GCP 때와 동일하게 읽히지만, 프로세스 생존 관리(크래시 자동재시작=`Restart=on-failure`, 부팅 자동기동=`enable`)는 systemd 가 책임진다.
 - **JAR은 JVM 바이트코드 → 러너 아키텍처 무관.** 표준 `ubuntu-latest`(x86)에서 빌드해도 EC2 ARM에서 그대로 실행된다(ARM 크로스컴파일 불필요). 네이티브 이미지가 아니라서 가능.
 - **테스트를 CI에서 실행(품질 게이트).** 테스트는 H2 인메모리라 외부 DB 없이 러너에서 단독 통과 → 깨진 코드는 배포되지 않는다.
-- **비밀 분리.** DB 접속정보 등은 **서버 프로파일에만** 둔다. CI에는 SSH 접속용 비밀만 보관(코드/CI에 DB 비밀 노출 금지).
-- **다운타임/롤백.** 단일 인스턴스라 재시작 = 수 초 다운타임. 배포 후 **헬스체크로 검증**하고, 실패하면 **이전 jar로 롤백**한다(장애 조기 차단·재발 방지). 무중단이 필요해지면 ALB+ASG 블루/그린으로 확장(추후).
+- **비밀 분리(서버 측 보관).** DB 접속정보 등은 EC2 의 `baseball.env`(`EnvironmentFile`)에만 둔다. CI 에는 SSH 접속용 비밀만 보관 → **GitHub Actions 로그/러너에 DB 비밀이 절대 닿지 않는다.** (GCP 때처럼 CI 에서 `application.yml`을 생성·주입하지 않는다.)
+- **다운타임/롤백.** 단일 인스턴스라 `stop → start` = 수 초 다운타임. 배포 후 **헬스체크로 검증**하고, 실패하면 **이전 jar로 롤백**한다(장애 조기 차단·재발 방지). 무중단이 필요해지면 ALB+ASG 블루/그린으로 확장(추후).
 - **헬스체크 엔드포인트.** `spring-boot-starter-actuator`를 추가하고 `management.endpoints.web.exposure.include=health`로 `/actuator/health`를 노출하면 깔끔하다(추후 Micrometer 메트릭 노출에도 재사용). 액추에이터를 안 쓰면 `/skill/play`에 도움말 발화 POST로 200을 확인한다.
 
 **GitHub Secrets** (Settings → Secrets and variables → Actions)
@@ -111,6 +127,65 @@ push(main) → [GitHub Actions Runner: ubuntu-latest]
 | `EC2_USER` | 접속 계정(예: `ubuntu`) |
 | `EC2_SSH_KEY` | **배포 전용** SSH 개인키(PEM). 개인 키 재사용 금지 |
 
+> GCP 워크플로의 `MIRI_ADMIN_DEMO_APPLICATION` 처럼 **설정 파일을 통째로 넣는 Secret 은 두지 않는다.** DB 비밀은 서버의 `baseball.env` 에만 존재한다.
+
+**배포 스크립트** — `deploy/scripts/stop.sh`, `deploy/scripts/start.sh`
+
+```bash
+# stop.sh — baseball 서비스 정지 (systemd 위임)
+set -euo pipefail
+PROJECT_ROOT="/home/ubuntu"
+DEPLOY_LOG="$PROJECT_ROOT/logs/deploy.log"
+SERVICE="baseball"
+mkdir -p "$PROJECT_ROOT/logs"
+TIME_NOW=$(date +%c)
+
+if sudo systemctl is-active --quiet "$SERVICE"; then
+  echo "$TIME_NOW > 실행중인 $SERVICE 서비스 정지" >> "$DEPLOY_LOG"
+  sudo systemctl stop "$SERVICE"
+else
+  echo "$TIME_NOW > 현재 실행중인 $SERVICE 서비스가 없습니다" >> "$DEPLOY_LOG"
+fi
+```
+
+```bash
+# start.sh — 새 JAR 교체 후 기동 + 헬스체크(실패 시 롤백)
+set -uo pipefail
+PROJECT_ROOT="/home/ubuntu"
+LIVE_JAR="$PROJECT_ROOT/baseball.jar"
+STAGED_JAR="$PROJECT_ROOT/deploy/baseball.jar"
+BACKUP_JAR="$PROJECT_ROOT/baseball.jar.bak"
+DEPLOY_LOG="$PROJECT_ROOT/logs/deploy.log"
+SERVICE="baseball"
+HEALTH_URL="http://localhost:8080/actuator/health"
+mkdir -p "$PROJECT_ROOT/logs"
+TIME_NOW=$(date +%c)
+
+# 1) 스테이징 JAR 확인 → 2) 현재본 백업 → 3) 교체
+[ -f "$STAGED_JAR" ] || { echo "$TIME_NOW > [에러] 스테이징 JAR 없음" >> "$DEPLOY_LOG"; exit 1; }
+[ -f "$LIVE_JAR" ] && cp -f "$LIVE_JAR" "$BACKUP_JAR"
+mv -f "$STAGED_JAR" "$LIVE_JAR"
+echo "$TIME_NOW > 새 JAR 배치 완료" >> "$DEPLOY_LOG"
+
+# 4) systemd 기동
+sudo systemctl start "$SERVICE"
+
+# 5) 헬스체크(3초 x 10회 ≈ 30초)
+ok=false
+for i in $(seq 1 10); do
+  curl -fsS "$HEALTH_URL" | grep -q '"status":"UP"' && { ok=true; break; }
+  sleep 3
+done
+
+# 6) 실패 시 롤백
+if [ "$ok" != "true" ]; then
+  echo "$TIME_NOW > [실패] 헬스체크 실패 → 롤백" >> "$DEPLOY_LOG"
+  [ -f "$BACKUP_JAR" ] && { mv -f "$BACKUP_JAR" "$LIVE_JAR"; sudo systemctl restart "$SERVICE"; }
+  exit 1
+fi
+echo "$TIME_NOW > 배포 성공 (서비스 UP)" >> "$DEPLOY_LOG"
+```
+
 **워크플로** — `.github/workflows/deploy.yml`
 
 ```yaml
@@ -120,6 +195,10 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:        # 콘솔에서 수동 실행도 허용
+
+concurrency:                # 배포 직렬화(앞 배포 진행 중이면 취소)
+  group: deploy-prod
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -134,11 +213,23 @@ jobs:
           java-version: '21'
           cache: gradle      # 빌드 속도 개선
 
-      - name: Test & Build
+      - name: Test & Build (prod)
         run: |
           chmod +x gradlew
-          ./gradlew clean test bootJar   # 테스트 실패 시 여기서 배포 중단
+          ./gradlew clean test bootJar -Pprofile=prod   # 테스트 실패 시 배포 중단
 
+      # 1) 배포 스크립트 업로드 (GCP 워크플로와 동일한 흐름)
+      - name: Upload deploy scripts
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: deploy/scripts/*.sh
+          target: /home/ubuntu/scripts
+          strip_components: 2            # deploy/scripts 제거
+
+      # 2) 새 JAR 업로드 (스테이징)
       - name: Upload JAR to EC2 (staging)
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -146,10 +237,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: build/libs/baseball.jar
-          target: /home/ubuntu/deploy/      # 스테이징 경로
-          strip_components: 2               # build/libs 제거 → baseball.jar 만 업로드
+          target: /home/ubuntu/deploy/
+          strip_components: 2            # build/libs 제거 → baseball.jar 만
 
-      - name: Swap, restart, health-check (with rollback)
+      # 3) stop -> start (헬스체크/롤백은 start.sh 내부)
+      - name: Run deploy scripts (stop -> start)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -157,21 +249,31 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            cd /home/ubuntu
-            cp -f baseball.jar baseball.jar.bak 2>/dev/null || true   # 현재본 백업
-            mv -f deploy/baseball.jar baseball.jar                    # 새 버전 교체
-            sudo systemctl restart baseball
+            chmod +x /home/ubuntu/scripts/*.sh
+            /home/ubuntu/scripts/stop.sh
             sleep 5
-            if ! curl -fsS http://localhost:8080/actuator/health; then
-              echo "health check failed → rollback"
-              mv -f baseball.jar.bak baseball.jar
-              sudo systemctl restart baseball
-              exit 1
-            fi
-            echo "deploy ok"
+            /home/ubuntu/scripts/start.sh
 ```
 
-> `systemctl restart baseball`을 비밀번호 없이 쓰려면 배포 계정에 sudoers `NOPASSWD` 한정 권한(해당 명령만)을 부여한다.
+**sudoers 설정 (필수)** — 스크립트가 `systemctl`을 비밀번호 없이 호출하려면 해당 명령만 `NOPASSWD`로 허용한다(최소 권한).
+`is-active`는 읽기 전용이라 root 불필요 → **start / stop / restart 3개만** 등록한다.
+
+> ⚠️ 규칙 텍스트를 **셸에 직접 붙여넣지 말 것**(`(root)`를 셸 문법으로 오해해 에러). 아래 heredoc 방식으로 파일을 생성하고 `visudo -c`로 검증한다.
+
+```bash
+# EC2 에서 그대로 실행 (셸에 붙여넣어도 안전)
+SC=$(which systemctl)              # 실제 경로 자동 확인 (보통 /usr/bin/systemctl)
+sudo tee /etc/sudoers.d/baseball-deploy > /dev/null <<EOF
+ubuntu ALL=(root) NOPASSWD: $SC start baseball, $SC stop baseball, $SC restart baseball
+EOF
+sudo chmod 440 /etc/sudoers.d/baseball-deploy
+sudo visudo -c                     # "parsed OK" 떠야 정상
+
+# 검증: 비밀번호 안 물으면 성공
+sudo -n systemctl restart baseball && echo "NOPASSWD OK"
+```
+
+> 전제: systemd 유닛이 먼저 설치돼 있어야 한다(`sudo cp deploy/baseball.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable baseball`). `Unit baseball.service not loaded` 가 보이면 이 단계를 안 한 것.
 
 **더 안전한 대안 (추후) — SSH 포트 없이 배포**
 

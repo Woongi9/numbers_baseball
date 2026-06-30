@@ -1,0 +1,25 @@
+# systemd 유닛 — 서버 배치: /etc/systemd/system/baseball.service
+# 적용:
+#   sudo cp deploy/baseball.service /etc/systemd/system/baseball.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now baseball
+[Unit]
+Description=Numbers Baseball (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+# DB 비밀은 코드/CI 가 아니라 이 파일에만 둔다(권한 600).
+EnvironmentFile=/home/ubuntu/baseball.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+# t4g.small(2GB): OS/Nginx 여유를 남기고 힙은 보수적으로 시작.
+# OOM/잦은 Full GC 가 보이면 힙을 키우기보다 t4g.medium(4GB)로 인스턴스를 올린다.
+ExecStart=/usr/bin/java -Xms512m -Xmx1g -jar /home/ubuntu/baseball.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

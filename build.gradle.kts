@@ -18,6 +18,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     // 요청 로깅(LogTrace)용 AOP. @Aspect/@Around + aspectjweaver 포함.
     implementation("org.springframework.boot:spring-boot-starter-aop")
+    // 헬스체크/메트릭. 배포 헬스체크(/actuator/health)·CloudWatch 메트릭 노출에 사용.
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     // Swagger UI (OpenAPI 3). Spring Boot 3.x는 springfox 대신 springdoc 사용.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
@@ -49,7 +51,10 @@ val profile = (project.findProperty("profile") as String?)?.takeIf { it.isNotBla
 sourceSets {
     main {
         resources {
-            srcDirs("src/main/resources", "src/main/resources-env/$profile")
+            // setSrcDirs(교체): 기본 경로(src/main/resources)에 '추가'하면
+            // 같은 경로가 두 번 등록돼 application-prod.yml 이 중복 복사된다.
+            // 교체로 각 디렉터리를 정확히 한 번씩만 등록.
+            setSrcDirs(listOf("src/main/resources", "src/main/resources-env/$profile"))
         }
     }
 }

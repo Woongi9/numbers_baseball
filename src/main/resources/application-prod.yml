@@ -1,0 +1,54 @@
+# 운영(AWS) 프로파일.
+# 활성화: 서버 systemd 에서 SPRING_PROFILES_ACTIVE=prod 로 지정.
+# 비밀 분리 원칙: DB 접속정보는 이 파일에 적지 않고 "서버의 환경변수"로만 주입한다.
+#   (systemd EnvironmentFile=/home/ubuntu/baseball.env)
+# 따라서 이 파일은 레포에 커밋되어도 비밀이 노출되지 않는다.
+server:
+  port: 8080
+
+logging:
+  file:
+    name: /home/ubuntu/logs/server.log   # CloudWatch Agent 가 이 파일을 수집
+
+spring:
+  application:
+    name: 운영-숫자야구
+
+  datasource:
+    # 예) jdbc:mysql://rds-numbers-baseball.clwsucmoylzi.ap-northeast-2.rds.amazonaws.com:3306/baseball?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useUnicode=true
+    url: ${DB_URL}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10          # db.t4g.micro 기준 보수적. RDS 커넥션 알람과 함께 튜닝.
+      connection-timeout: 4500       # 카카오 5초 제약 → DB 대기 빨리 포기(꼬리 지연 방어)
+
+  jpa:
+    hibernate:
+      # 최초 1회 스키마 생성이 필요하면 잠깐 update 로 올린 뒤, 안정화되면 validate 로 고정 권장.
+      ddl-auto: update
+    show-sql: false                  # 운영 로그 노이즈/오버헤드 제거
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+# 헬스체크/메트릭. 배포 헬스체크는 /actuator/health 를 사용.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info          # 운영에선 최소만 노출(보안). 메트릭 필요 시 metrics,prometheus 추가
+  endpoint:
+    health:
+      show-details: never             # 외부에 내부 구조 노출 금지
+  health:
+    db:
+      enabled: true                   # DB 연결 실패 시 health=DOWN → 배포 헬스체크가 잡아 롤백
+
+# Swagger 는 운영에서 끄는 편이 안전(원하면 true 로)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

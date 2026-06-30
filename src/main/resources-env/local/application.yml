@@ -9,7 +9,7 @@ spring:
   profiles:
     active: local
   application:
-    name: numbers-baseball
+    name: 로컬-숫자야구
 
   # 로컬 MySQL (docker-compose.yml로 기동). 운영 RDS와 같은 8.0 + utf8mb4로 통일.
   datasource:

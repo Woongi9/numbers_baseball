@@ -1,0 +1,43 @@
+{
+  "//": "CloudWatch Agent 설정 — EC2 기본 미수집 지표(메모리/디스크) + 앱 로그 수집.",
+  "//apply": "sudo cp deploy/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json && sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s",
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "cwagent"
+  },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ]
+      },
+      "disk": {
+        "resources": [
+          "/"
+        ],
+        "measurement": [
+          "disk_used_percent"
+        ]
+      }
+    }
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/home/ubuntu/logs/server.log",
+            "log_group_name": "/baseball/app",
+            "log_stream_name": "{instance_id}",
+            "timezone": "Local"
+          }
+        ]
+      }
+    }
+  }
+}
