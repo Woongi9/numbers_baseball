@@ -116,9 +116,15 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("알 수 없는 발화는 도움말을 반환한다")
+    @DisplayName("알 수 없는 발화는 사용법을 반환한다")
     fun helpMessage() {
-        play("안녕", "it-user-help", "숫자야구")
+        play("안녕", "it-user-help", "사용법")
+    }
+
+    @Test
+    @DisplayName("'게임 규칙'은 STRIKE/BALL/OUT 규칙을 반환한다")
+    fun rulesMessage() {
+        play("게임 규칙", "it-user-rules", "STRIKE")
     }
 
     @Test

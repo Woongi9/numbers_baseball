@@ -55,6 +55,8 @@ class SkillController(
 
             SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
 
+            SkillCommand.RULES -> rulesMessage()
+
             SkillCommand.HELP -> helpMessage()
         }
 
@@ -95,12 +97,33 @@ class SkillController(
     private fun formatRankLine(e: RankEntry): String =
         "${e.rank}위  ${e.label}  ${e.score}점\n"
 
+    /** 사용법: 명령어 안내. 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다. */
     private fun helpMessage(): String =
         """
-        숫자야구 게임입니다.
+        숫자야구 사용법입니다.
         - '시작' : 새 게임 시작
         - 서로 다른 숫자 입력 : 추측 (예: 1234)
         - '포기' : 정답 공개
         - '랭킹' : 이 채팅방 점수 순위
+        - '게임 규칙' : 게임 방법 설명
         """.trimIndent()
+
+    /**
+     * 게임 규칙: 승패 판정(STRIKE/BALL/OUT) 설명. 자릿수는 GameService.DIGITS로 단일화.
+     * BaseballJudge 판정과 문구를 일치시킨다: STRIKE=자리+숫자, BALL=숫자만(자리 다름), OUT=0S 0B.
+     * 예시 숫자는 이해를 돕기 위한 고정 값(DIGITS=4 기준)이다.
+     */
+    private fun rulesMessage(): String {
+        val n = GameService.DIGITS
+        return """
+            [숫자야구 규칙]
+            서로 다른 ${n}자리 숫자(중복 없이)를 맞히는 게임입니다.
+            - STRIKE(스트라이크) : 숫자와 자리 모두 일치
+            - BALL(볼) : 숫자는 있지만 자리가 다름
+            - OUT(아웃) : 맞는 숫자가 하나도 없음 (0S 0B)
+
+            예) 정답 1234 / 추측 1325 → 1S 2B
+            ${n}S가 되면 승리! '시작'으로 도전하세요.
+        """.trimIndent()
+    }
 }

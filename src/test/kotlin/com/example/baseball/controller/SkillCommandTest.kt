@@ -44,6 +44,22 @@ class SkillCommandTest {
     }
 
     @Test
+    @DisplayName("규칙 계열 단어 → RULES")
+    fun rules() {
+        listOf("게임규칙", "게임 규칙", "규칙").forEach {
+            assertEquals(SkillCommand.RULES, SkillCommand.classify(it))
+        }
+    }
+
+    @Test
+    @DisplayName("사용법 계열 단어 → HELP")
+    fun helpWords() {
+        listOf("사용법", "도움말").forEach {
+            assertEquals(SkillCommand.HELP, SkillCommand.classify(it))
+        }
+    }
+
+    @Test
     @DisplayName("그 외(빈 문자열·일반 텍스트·숫자+문자 혼합) → HELP")
     fun help() {
         assertEquals(SkillCommand.HELP, SkillCommand.classify(""))
