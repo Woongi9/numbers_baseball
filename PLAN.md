@@ -432,7 +432,7 @@ SELECT COUNT(*) FROM users;
 - [x] **상위권 칭호/이모티콘** — 상위 30% / 20% / 10% 구간별로 서로 다른 이모티콘·칭호를 표기 (2026-07-05 완료: 순수 열거 `RankTitle.of(topPercent)` 추가·단위 테스트, `SkillController.percentileLine`에서 노출. 백분위는 STEP 9-P `Percentile` 재사용)
 - [ ] **시간 가중 점수** — 정답까지 걸린 시간을 점수 산정에 반영 (`ScoreCalculator.gain`에 소요시간 요소 추가 → 빠를수록 가산). 게임 시작~정답 시각이 필요하므로 `Game` 엔티티의 타임스탬프 저장/활용 선행 · **미완(점수 산정 로직 변경이라 이번 표현 레이어 작업에서 분리, 다음 진행)**
 
-### 🟡 STEP 12. [UX] 응답을 BasicCard(썸네일 + 메시지 + 버튼)로 전환 (2026-07-05 추가)
+### 🟢 STEP 12. [UX] 응답을 BasicCard(썸네일 + 메시지 + 버튼)로 전환 (2026-07-05 추가) — 🔶 구현 완료, 배포 검증만 남음
 
 > **목표**: 현재 `simpleText` 위주의 판정 응답을 카카오 **BasicCard**로 전환해, `썸네일(이미지) + 메시지(title/description) + 버튼들`로 표현한다. 스트라이크/볼 결과에 시각 요소와 재도전·포기 버튼을 붙여 리텐션·조작성을 높이는 게 목적.
 > **근거**: 카카오 skill JSON 포맷의 `basicCard`가 정확히 이 3요소를 지원함(썸네일 **필수**, buttons 가로 최대 2·세로 최대 3). STEP 11(정답 연출 강화)의 시각 UX와 결이 같아 함께 진행하면 시너지.
@@ -466,16 +466,16 @@ SELECT COUNT(*) FROM users;
 #### 🔎 피드백 (우선순위별)
 
 **🔴 중요 (반드시 반영)**
-- [ ] **`thumbnail` 필수 처리** — imageUrl 없이 BasicCard 전송 시 렌더 실패/발송 거부 가능. 이미지 미준비 상태에서는 **BasicCard 대신 simpleText로 폴백**하는 분기를 두어 응답 누락(카카오 5초 초과)을 막는다.
-- [ ] **응답 모델 타입화** — JSON 문자열 직접 조립 대신 `data class`(BasicCard/Thumbnail/Button)로 모델링 후 Jackson 직렬화. 버튼 개수(가로 2·세로 3) 제한을 생성 시점에 검증해 규격 위반을 컴파일/런타임 초기에 차단.
+- [x] **`thumbnail` 필수 처리** — 완료. `kakao.image-base-url` 설정값이 비면(테스트/기본) **simpleText 폴백**, 있으면 BasicCard. 폴백을 하위호환 장치로 써서 기존 통합 테스트를 그대로 통과시킴.
+- [x] **응답 모델 타입화** — 완료. `SkillResponse.BasicCard/Thumbnail/Button` data class + `@JsonInclude(NON_NULL)`. 버튼 3개·title 50·desc 230 초과를 `init`에서 검증(fail-fast) + 단위 테스트(`SkillResponseTest`).
 
 **🟡 경고 (하는 게 좋음)**
-- [ ] **description 230자·title 50자 컷** — 사용자 입력/누적 문구가 길어질 때 초과분 truncate. 초과 시 카드가 잘리거나 발송 실패.
-- [ ] **이미지 호스팅/캐시** — imageUrl은 외부에서 접근 가능한 안정적 URL이어야 함. S3/CDN 등 고정 URL 사용, 요청마다 동적 생성은 지연 유발.
+- [x] **description 230자·title 50자 컷** — 완료. `cardOrText`에서 `title.take(50)`·`description.take(230)`로 방어.
+- [x] **이미지 호스팅/캐시** — 완료. Spring 정적 리소스(`static/images/`) + Cloudflare 도메인 `numbers-baseball.com` 고정 URL. 캐시 무효화는 **파일명 버저닝** 정책. 이미지 5종을 **800×800로 최적화**(장당 ~1.5MB→~110KB, 원본은 `image-originals/` 백업).
 
 **🟢 제안 (개선 고려)**
-- [ ] **결과별 썸네일 분기** — 승리/진행중/패배에 따라 다른 이미지로 몰입감 강화(STEP 11 연출과 통합).
-- [ ] **버튼 액션 `block` 활용** — 재도전을 `message` 대신 특정 블록 호출(`action: block`)로 연결하면 대화 흐름 제어가 명확.
+- [x] **결과별 썸네일 분기** — 완료. `start / strike / ball / out / answer` 5종 + 포기는 `out` 재사용. 진행중은 아웃→스트라이크(1+)→볼 순으로 선택.
+- [~] **버튼 액션** — `message` 채택. `block` 대신, **오픈채팅에선 `message` 버튼이 즉시 전송 대신 `@봇 ` 프리필**되는 동작을 활용(진행 카드 `제출` 버튼 = 빈 messageText). 상세: [[kakao-openchat-button-prefill]].
 
 #### 내부 동작 순서 (BasicCard 응답 흐름)
 ```
@@ -489,13 +489,34 @@ SELECT COUNT(*) FROM users;
 
 **산출물/검증**
 
-| 항목 | 산출물 | 검증 |
-|------|--------|------|
-| 응답 모델 | `BasicCard`/`Thumbnail`/`Button` data class | 직렬화 결과가 스펙 JSON과 일치(단위 테스트) |
-| 판정 응답 | 판정부에서 BasicCard 반환 | 오픈빌더 실제 카드 노출(썸네일+버튼) 확인 |
-| 폴백 | 이미지 없음 시 simpleText | 이미지 URL 제거해도 정상 응답 |
+| 항목 | 산출물 | 검증 | 상태 |
+|------|--------|------|------|
+| 응답 모델 | `BasicCard`/`Thumbnail`/`Button` data class | 직렬화 결과가 스펙 JSON과 일치(단위 테스트) | ✅ `SkillResponseTest` |
+| 판정 응답 | 판정부에서 BasicCard 반환 | 오픈빌더 실제 카드 노출(썸네일+버튼) 확인 | 🔶 코드 완료, **배포 검증 대기** |
+| 폴백 | 이미지 없음 시 simpleText | 이미지 URL 제거해도 정상 응답 | ✅ 기존 통합 테스트 통과 |
+| 카드 경로 | 이미지 URL 설정 시 카드 | 시작/추측/포기 카드·버튼 검증 | ✅ `SkillControllerCardTest` |
 
-> **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons(가로2·세로3). ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증 — 이 둘만 지키면 안전하게 전환 가능.
+#### ✅ 구현 결과 (2026-07-05)
+- **이미지**: `start/strike/ball/out/answer.png` 5종, 800×800 최적화. `image-originals/`에 원본 백업. Spring `static/images/`에서 서빙(로컬 200 확인).
+- **응답 모델**: `SkillResponse`에 BasicCard/Thumbnail/Button/**TextCard** + NON_NULL + 생성 시점 검증(버튼3·title50·desc230/400). `Thumbnail.fixedRatio=true`(1:1 이미지 크롭 방지, 버튼 가로 최대 2). 포기는 썸네일 없는 **TextCard**로 처리.
+- **컨트롤러**: `kakao.image-base-url` 있으면 카드, 없으면 simpleText 폴백. 상황별 고정 버튼 맵:
+
+  | 상황 | 썸네일 | 버튼 |
+  |------|--------|------|
+  | 시작 | start | `[게임 규칙]` `[포기]` |
+  | 진행(strike/ball/out) | strike/ball/out | `[제출]`(오픈채팅 멘션 프리필, 빈 messageText) |
+  | 포기 | 없음(**TextCard**) | `[게임 규칙]` `[시작]` |
+  | 정답 | answer | `[새 게임 시작]` `[랭킹]` |
+
+- **설정**: prod=`https://numbers-baseball.com/images`(env `KAKAO_IMAGE_BASE_URL` 오버라이드 가능), local=`http://localhost:8080/images`, test=미설정(폴백).
+
+#### ⏳ 남은 것 (배포 검증 — STEP 12 마무리)
+- [X] `./gradlew test` 전체 통과 확인
+- [X] prod 재배포 후 `curl -I -A "" https://numbers-baseball.com/images/answer.png` → 200 + image/* (Cloudflare Bot Fight Mode 예외 / SSL `Full` / 프록시 상태 점검)
+- [ ] 오픈빌더 실제 카드 노출(썸네일+버튼) 확인
+- [ ] **오픈채팅에서 `제출` 버튼 → 입력창 `@봇 ` 프리필 실동작 확인** (빈 messageText가 라벨 없이 멘션만 프리필되는지; 안 되면 messageText를 공백 등으로 조정)
+
+> **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons. ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증, ③1:1 이미지는 `fixedRatio=true`(버튼 가로 최대 2), ④오픈채팅에선 `message` 버튼이 `@봇 ` 프리필. 코드 완료 → 배포 검증만 남음.
 
 ### 🟢 STEP 13. [인프라-확장] dev/prod 2-티어 배포 + 출시 전 부하 테스트 (2026-07-05 추가)
 
