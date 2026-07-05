@@ -4,7 +4,9 @@ import com.example.baseball.dto.SkillRequest
 import com.example.baseball.dto.SkillResponse
 import com.example.baseball.service.GameService
 import com.example.baseball.service.GuessOutcome
+import com.example.baseball.service.Percentile
 import com.example.baseball.service.RankEntry
+import com.example.baseball.service.RankTitle
 import com.example.baseball.service.RankingService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -66,18 +68,35 @@ class SkillController(
             r.isWin -> {
                 val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
                 buildString {
-                    appendLine("정답입니다! ${outcome.tries}번 만에 맞혔습니다.")
+                    appendLine(winHeadline(outcome.tries))
                     appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
                     // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
-                    outcome.percentile?.let {
-                        appendLine("🏅 이번 시즌 상위 ${it.topPercent}% (${it.rank}위 / ${it.total}명)")
-                    }
-                    append("'시작'으로 다시 플레이하세요.")
+                    outcome.percentile?.let { appendLine(percentileLine(it)) }
+                    append("'시작'으로 다시 도전하세요!")
                 }
             }
             r.isOut -> "${outcome.tries}번째 시도: OUT (0S 0B)"
             else -> "${outcome.tries}번째 시도: ${r.strike}S ${r.ball}B"
         }
+    }
+
+    /**
+     * 정답 축하 연출(STEP-11). 시도 횟수가 적을수록 임팩트가 큰 문구를 준다(성취감·리텐션).
+     * 모든 분기에 "정답" 키워드를 유지해, 승리 판정 여부를 문구로 확인하는 상위 로직/테스트가 안정적으로 매칭된다.
+     */
+    private fun winHeadline(tries: Int): String = when (tries) {
+        1 -> "🎯 딱 한 번에 정답! 초구 만루홈런이에요! ⚾"
+        in 2..3 -> "🎉 정답! ${tries}번 만에 시원한 홈런을 날렸어요! ⚾"
+        else -> "🎉 정답! ${tries}번 만에 맞혔어요! ⚾"
+    }
+
+    /**
+     * 상위 백분위 노출(STEP-11). 상위 30% 이내면 구간별 칭호(RankTitle)를, 그 밖이면 기본 메달 문구를 앞에 붙인다.
+     * 백분위는 이미 계산된 Percentile 값을 재사용하고, 칭호는 topPercent 매핑만 얹는다(중복 계산 없음).
+     */
+    private fun percentileLine(p: Percentile): String {
+        val badge = RankTitle.of(p.topPercent)?.let { "${it.emoji} ${it.label} · " } ?: "🏅 "
+        return "${badge}이번 시즌 상위 ${p.topPercent}% (${p.rank}위 / ${p.total}명)"
     }
 
     /** 봇(채팅방) 랭킹 TOP 10 텍스트. botKey 없음·빈 랭킹은 안내 메시지로 변환. */

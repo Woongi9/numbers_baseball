@@ -63,8 +63,8 @@ class SkillControllerIntegrationTest @Autowired constructor(
         val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
         assertNotNull(game) // DB에 진행중 게임 생성됨
 
-        // 2) DB의 실제 정답으로 추측 → 승리
-        play(game.answer, userId, "정답입니다")
+        // 2) DB의 실제 정답으로 추측 → 승리 (STEP-11 연출 문구는 가변이므로 안정적 키워드 "정답"만 검증)
+        play(game.answer, userId, "정답")
 
         // 3) 상태가 WON 으로 전이되었는지 확인 (이전 요청이 커밋했으므로 재조회로 검증)
         val finished = gameRepository.findById(game.id!!).orElseThrow()
