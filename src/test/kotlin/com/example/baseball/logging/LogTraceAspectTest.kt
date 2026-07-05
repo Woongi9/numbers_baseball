@@ -21,8 +21,10 @@ class LogTraceAspectTest {
         userRequest = SkillRequest.UserRequest(
             utterance = "1234",
             user = SkillRequest.User(id = "u1"),
+            chat = SkillRequest.Chat(
+                properties = SkillRequest.Properties(botGroupKey = "bot-1"),
+            ),
         ),
-        bot = SkillRequest.Bot(id = "bot-1"),
     )
 
     /** proceed() 가 주어진 동작을 하도록 만든 ProceedingJoinPoint mock. */

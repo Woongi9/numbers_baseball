@@ -35,7 +35,7 @@ class LogTraceAspect {
     @Around("execution(* com.example.baseball.controller.SkillController.play(..))")
     fun trace(joinPoint: ProceedingJoinPoint): Any? {
         val request = joinPoint.args.firstOrNull() as? SkillRequest
-        val botKey = request?.bot?.id ?: "-"
+        val botKey = request?.userRequest?.chat?.properties?.botGroupKey ?: "-"
         val botUserKey = request?.userRequest?.user?.id ?: "-"
         val utterance = request?.userRequest?.utterance?.trim().orEmpty()
         val intent = SkillCommand.classify(utterance).name

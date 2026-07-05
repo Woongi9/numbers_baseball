@@ -27,10 +27,10 @@ class SkillControllerIntegrationTest @Autowired constructor(
     private val userRepository: UserRepository,
     private val botUserRepository: BotUserRepository,
 ) {
-    /** 카카오 스킬 요청 본문 생성 (botKey 선택적으로 bot.id 포함) */
+    /** 카카오 스킬 요청 본문 생성 (botKey 선택적으로 chat.properties.botGroupKey 포함) */
     private fun body(utterance: String, userId: String, botKey: String? = null): String {
-        val botPart = botKey?.let { ""","bot":{"id":"$it"}""" } ?: ""
-        return """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}}$botPart}"""
+        val chatPart = botKey?.let { ""","chat":{"properties":{"botGroupKey":"$it"}}""" } ?: ""
+        return """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}$chatPart}}"""
     }
 
     /** /skill/play 호출 후 simpleText.text 가 expected 를 포함하는지 검증 */

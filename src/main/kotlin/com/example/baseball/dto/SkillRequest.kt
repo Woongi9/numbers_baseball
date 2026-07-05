@@ -10,26 +10,32 @@ import io.swagger.v3.oas.annotations.media.Schema
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SkillRequest(
     val userRequest: UserRequest,
-    // 카카오 페이로드의 최상위 bot.id = 봇(채팅방) 식별자. 랭킹을 봇 단위로 묶는 키.
-    // 일부 요청/테스트에는 없을 수 있어 nullable.
-    val bot: Bot? = null,
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class UserRequest(
         @field:Schema(description = "사용자 발화", example = "1234")
         val utterance: String,
         val user: User,
-    )
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    data class Bot(
-        @field:Schema(description = "봇(채팅방) ID = botKey", example = "test-bot-001")
-        val id: String,
+        // 그룹 챗봇 페이로드의 chat. chat.properties.botGroupKey 가 채팅방(그룹) 식별자.
+        // 개인 챗봇·일부 요청/테스트에는 없을 수 있어 nullable.
+        val chat: Chat? = null,
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class User(
         @field:Schema(description = "카카오 사용자 ID", example = "test-user-001")
         val id: String,
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class Chat(
+        val properties: Properties? = null,
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class Properties(
+        // 그룹 챗봇 채팅방(그룹) 식별자. 내부적으로 botKey 로 사용해 랭킹을 그룹 단위로 묶는다.
+        @field:Schema(description = "그룹 챗봇 채팅방 ID = botKey", example = "test-bot-001")
+        val botGroupKey: String? = null,
     )
 }

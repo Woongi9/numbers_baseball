@@ -29,7 +29,7 @@ class SkillController(
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val userId = request.userRequest.user.id
-        val botKey = request.bot?.id
+        val botKey = request.userRequest.chat?.properties?.botGroupKey
         val utterance = request.userRequest.utterance.trim()
         return SkillResponse.text(handle(userId, botKey, utterance))
     }
