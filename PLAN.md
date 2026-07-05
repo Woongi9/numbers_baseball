@@ -432,16 +432,140 @@ SELECT COUNT(*) FROM users;
 - [ ] **상위권 칭호/이모티콘** — 상위 30% / 20% / 10% 구간별로 서로 다른 이모티콘·칭호를 표기 (기존 상위 N% 표기(STEP 9-P)의 백분위 재활용, 구간→칭호 매핑만 추가)
 - [ ] **시간 가중 점수** — 정답까지 걸린 시간을 점수 산정에 반영 (`ScoreCalculator.gain`에 소요시간 요소 추가 → 빠를수록 가산). 게임 시작~정답 시각이 필요하므로 `Game` 엔티티의 타임스탬프 저장/활용 선행
 
-### 🟡 STEP 12. [고도화-추후] 어려움 모드(판정부) / 전체 랭킹
+### 🟡 STEP 12. [UX] 응답을 BasicCard(썸네일 + 메시지 + 버튼)로 전환 (2026-07-05 추가)
+
+> **목표**: 현재 `simpleText` 위주의 판정 응답을 카카오 **BasicCard**로 전환해, `썸네일(이미지) + 메시지(title/description) + 버튼들`로 표현한다. 스트라이크/볼 결과에 시각 요소와 재도전·포기 버튼을 붙여 리텐션·조작성을 높이는 게 목적.
+> **근거**: 카카오 skill JSON 포맷의 `basicCard`가 정확히 이 3요소를 지원함(썸네일 **필수**, buttons 가로 최대 2·세로 최대 3). STEP 11(정답 연출 강화)의 시각 UX와 결이 같아 함께 진행하면 시너지.
+
+**BasicCard 필드 매핑**
+
+| 원하는 것 | BasicCard 필드 | 필수 | 제한 |
+|-----------|----------------|------|------|
+| 썸네일 | `thumbnail.imageUrl` | **O** | URL, 단일형 2:1(800×400)·1:1(800×800) |
+| 메시지 | `title` + `description` | X | title 50자 / description 230자 |
+| 버튼들 | `buttons[]` (`buttonLayout`) | X | 가로 2개, 세로 3개 |
+
+**응답 JSON 예시 (숫자야구 판정 결과)**
+```json
+{
+  "version": "2.0",
+  "template": { "outputs": [ {
+    "basicCard": {
+      "title": "⚾ 4S 2B",
+      "description": "정답에 대해 스트라이크 4, 볼 2!",
+      "thumbnail": { "imageUrl": "https://.../baseball.jpg", "altText": "판정 결과" },
+      "buttons": [
+        { "action": "message", "label": "다시 도전", "messageText": "숫자야구 시작" },
+        { "action": "message", "label": "포기", "messageText": "포기" }
+      ]
+    }
+  } ] }
+}
+```
+
+#### 🔎 피드백 (우선순위별)
+
+**🔴 중요 (반드시 반영)**
+- [ ] **`thumbnail` 필수 처리** — imageUrl 없이 BasicCard 전송 시 렌더 실패/발송 거부 가능. 이미지 미준비 상태에서는 **BasicCard 대신 simpleText로 폴백**하는 분기를 두어 응답 누락(카카오 5초 초과)을 막는다.
+- [ ] **응답 모델 타입화** — JSON 문자열 직접 조립 대신 `data class`(BasicCard/Thumbnail/Button)로 모델링 후 Jackson 직렬화. 버튼 개수(가로 2·세로 3) 제한을 생성 시점에 검증해 규격 위반을 컴파일/런타임 초기에 차단.
+
+**🟡 경고 (하는 게 좋음)**
+- [ ] **description 230자·title 50자 컷** — 사용자 입력/누적 문구가 길어질 때 초과분 truncate. 초과 시 카드가 잘리거나 발송 실패.
+- [ ] **이미지 호스팅/캐시** — imageUrl은 외부에서 접근 가능한 안정적 URL이어야 함. S3/CDN 등 고정 URL 사용, 요청마다 동적 생성은 지연 유발.
+
+**🟢 제안 (개선 고려)**
+- [ ] **결과별 썸네일 분기** — 승리/진행중/패배에 따라 다른 이미지로 몰입감 강화(STEP 11 연출과 통합).
+- [ ] **버튼 액션 `block` 활용** — 재도전을 `message` 대신 특정 블록 호출(`action: block`)로 연결하면 대화 흐름 제어가 명확.
+
+#### 내부 동작 순서 (BasicCard 응답 흐름)
+```
+[사용자 숫자 입력] → 카카오 → 스킬 서버 POST(utterance)
+   └─▶ 스트라이크/볼 계산
+        └─▶ 결과 상태(승/진행/패) 판별 → 썸네일·title·description·buttons 조립
+             └─▶ thumbnail 유효? ─┬─ Y → BasicCard 직렬화
+                                   └─ N → simpleText 폴백
+                  └─▶ version/template.outputs[] 반환 → 카카오 렌더 → 사용자 표시
+```
+
+**산출물/검증**
+
+| 항목 | 산출물 | 검증 |
+|------|--------|------|
+| 응답 모델 | `BasicCard`/`Thumbnail`/`Button` data class | 직렬화 결과가 스펙 JSON과 일치(단위 테스트) |
+| 판정 응답 | 판정부에서 BasicCard 반환 | 오픈빌더 실제 카드 노출(썸네일+버튼) 확인 |
+| 폴백 | 이미지 없음 시 simpleText | 이미지 URL 제거해도 정상 응답 |
+
+> **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons(가로2·세로3). ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증 — 이 둘만 지키면 안전하게 전환 가능.
+
+### 🟢 STEP 13. [인프라-확장] dev/prod 2-티어 배포 + 출시 전 부하 테스트 (2026-07-05 추가)
+
+> **목표**: INF-2(단일 prod EC2+RDS)·INF-3(`main`→prod 자동배포) 위에 **dev 티어**를 얹어, `develop`에서 검증 → `main`으로 승격하는 2-티어 배포 파이프라인을 만든다. 그리고 **실서비스 오픈 전** prod에 부하 테스트를 1회 수행한다.
+> **배경**: 초기엔 "단일 EC2에 dev/prod 포트 분리" 검토 → **노이지 네이버(자원 경쟁)** 이슈로 **EC2 물리 분리**로 방향 전환(2026-07-05 논의 결과). 부하 테스트도 "측정 대상과 부하 생성기를 분리"가 핵심.
+
+**계획 흐름 (사용자 확정 5단계)**
+```
+1. 저사양 dev EC2 생성 + RDS 스키마 `numbers-baseball-dev` 연결
+2. develop 브랜치 push → dev EC2 자동 배포 (branch 기반 CD)
+3. dev에서 기능 검증 (dev/prod 두 환경 기동 확인)
+4. 실서비스 오픈 전 → prod EC2에 부하 테스트 (실사용자 0 → 안전)
+5. prod 배포 및 실서비스 오픈
+```
+
+#### 🔎 피드백 (우선순위별)
+
+**🔴 중요 (반드시 반영)**
+- [ ] **branch→환경 매핑 명시** — 기존 워크플로는 `main`→prod 하나뿐. dev 티어 추가 시 `develop`→dev EC2 워크플로가 **별도로** 필요. 두 워크플로(또는 `on.push.branches`로 분기 + 대상 Secret 분리)로 **브랜치별 배포 대상**을 고정한다. 뒤섞이면 dev 코드가 prod로 나가는 사고 가능.
+
+  | 브랜치 | 배포 대상 | 프로파일 | Secret |
+  |--------|----------|---------|--------|
+  | `develop` | dev EC2 | `dev` | `DEV_EC2_HOST` / `DEV_EC2_SSH_KEY` |
+  | `main` | prod EC2 | `prod` | `EC2_HOST` / `EC2_SSH_KEY` |
+
+- [ ] **dev/prod DB를 같은 RDS 인스턴스로 둘지 결정** — 사용자 안(`numbers-baseball-dev` 스키마)은 **같은 RDS에 DB만 분리**하는 방식으로 이해. 평상시 개발엔 dev 발자국이 작아 OK(비용 이득). **단 STEP 4 부하 테스트 시**: prod DB를 때리면 같은 RDS 인스턴스의 **버퍼풀·커넥션·IOPS를 공유**하므로 dev DB(=본인 개발 작업)가 느려짐. 출시 전이라 실사용자 피해는 없지만, 테스트 창 동안 개발이 막힐 수 있음을 인지.
+- [ ] **⚠️ 출시 후 부하 테스트는 별도 처리** — STEP 4 부하 테스트가 안전한 건 **오직 출시 전(사용자 0)**이기 때문. 오픈(STEP 5) **이후** 재부하 테스트가 필요하면, 같은 RDS를 때리면 실사용자에게 버퍼풀 축출로 지연 전파 → 그땐 **일회용 RDS 생성→테스트→삭제**로 격리할 것.
+
+**🟡 경고 (하는 게 좋음)**
+- [ ] **부하 생성기(k6/JMeter)는 측정 대상과 분리** — dev EC2나 prod EC2 **안에서** 부하를 만들면 측정값이 오염(박스 한계를 재게 됨). 로컬 PC나 **별도 임시 인스턴스**에서 prod 도메인을 때린다.
+- [ ] **출시 전 테스트 데이터 정리** — 부하로 prod DB에 쌓인 더미 데이터를 오픈 전 초기화. 시즌 리셋(STEP F)이 있으니 **월 1일 리셋 타이밍에 빈 상태로 오픈**하는 게 가장 단순.
+- [ ] **dev EC2 상시 가동 불필요** — dev는 트래픽이 없으니 개발할 때만 start/stop(또는 필요 시 기동)해 비용 절감. `t3.micro`/`t3.small`로 충분(부하 생성 용도로는 쓰지 않으므로 저사양 OK).
+
+**🟢 제안 (개선 고려)**
+- [ ] **`dev` 프로파일 추가** — `resources-env/dev/application.yml` 신설(dev RDS 엔드포인트, `ddl-auto: update` 허용 가능). prod는 `validate` 유지. → local/test/dev/prod 4-프로파일 체계.
+- [ ] **부하 테스트 지표 정의** — RPS, **p95/p99 지연**, 에러율, 그리고 **카카오 5초 타임아웃** 초과율을 핵심 지표로. "몇 동시 사용자까지 5초 내 응답"이 합격선.
+- [ ] **dev SG는 SSH도 내 IP만** — dev EC2도 22번은 내 IP로 제한, dev RDS 접근은 `sg-dev-ec2` 참조(INF-2 원칙 동일 적용).
+
+#### 내부 동작 순서 (2-티어 배포 흐름)
+```
+[feature 작업] → develop 병합/푸시
+   └─▶ Actions(dev): test(H2) → bootJar(-Pprofile=dev) → scp → dev EC2 restart → 헬스체크
+        └─▶ dev에서 기능 검증 (dev RDS `numbers-baseball-dev`)
+             └─▶ (출시 전) prod EC2에 부하 테스트 [부하생성기=별도 머신]
+                  └─▶ develop → main 승격(PR merge)
+                       └─▶ Actions(prod): test → bootJar(-Pprofile=prod) → scp → prod EC2 restart → 헬스체크
+                            └─▶ 데이터 초기화 확인 → 실서비스 오픈
+```
+
+**산출물/검증**
+
+| 항목 | 산출물 | 검증 |
+|------|--------|------|
+| dev 환경 | dev EC2, `numbers-baseball-dev` DB, `dev` 프로파일 | dev 도메인 `curl` 정답 + dev RDS row 적재 |
+| dev CD | `.github/workflows/deploy-dev.yml` | `develop` 푸시 → dev 자동배포+헬스체크 |
+| 부하 테스트 | k6 스크립트, 결과 리포트(p95·에러율·5초초과율) | 목표 동시성에서 5초 내 응답 유지 확인 |
+| 오픈 | prod 데이터 초기화 | 더미 데이터 0 + 카카오 봇 정상 응답 |
+
+> **한 줄 요약**: 구조는 타당함. 다만 ①**브랜치별 배포 대상 고정**, ②**부하 생성기 분리**, ③**출시 후 부하 테스트는 일회용 RDS** — 이 3가지만 지키면 문제없음.
+
+### 🟡 STEP 14. [고도화-추후] 어려움 모드(판정부) / 전체 랭킹
 - [x] 어려움 모드 **정답 생성** — `GameDifficulty.symbols`로 HARD(`a~e`)/EASY 후보 주입 완료
 - [ ] 어려움 모드 **추측/판정** — `SkillController`의 `it.isDigit()` 분기가 `a~e` 입력을 막음 → 허용 문자집합(`difficulty.symbols`) 기준 검증 + **대소문자 정규화**(`A`→`a`)로 변경 필요
 - [ ] 난이도 배수를 점수 산정에 적용 (`MmrCalculator`에서 `* difficulty.multiplier`)
 - [ ] `전체랭킹`: `WHERE` 없는 전역 `score DESC` 조회
 
-### 🟡 STEP 13. 부가기능 (시간 남으면)
+### 🟡 STEP 15. 부가기능 (시간 남으면)
 - [ ] 시도 제한 → 힌트 → 자릿수 선택 → 전적(승률·평균 시도)
 
-### 🟡 STEP 14. 운영 강화 (이후)
+### 🟡 STEP 16. 운영 강화 (이후)
 - [ ] H2 → MySQL 전환 → **[6-C. INF-1~3 으로 구체화됨](#6-c--2026-06-27-추가-로컬-mysql-전환--aws-운영-배포--github-actions-cicd)** (로컬 MySQL · AWS EC2/RDS · GitHub Actions)
 - [ ] 요청 로깅 + 응답시간 메트릭 / 모니터링·알림
 
@@ -781,7 +905,7 @@ STEP 9 STEP C(점수 적립) 완료
 - 1차(배포까지)는 완료 ✅ → 이번은 **게임/랭킹 두 갈래 고도화**.
 - **게임**: 보통 모드 + (추후)어려움 모드(숫자+알파벳). 정답 시 **MMR 상승**(`max(MIN_GAIN, BASE - tries*STEP) * 난이도배수`).
 - **랭킹**: 현재 채팅방 내 `mmr DESC` TOP N + (추후)전체 랭킹.
-- 진행 순서: **STEP 9 MMR → STEP 10 채팅방 랭킹 → (추후)STEP 12 어려움/전체랭킹**.
+- 진행 순서: **STEP 9 MMR → STEP 10 채팅방 랭킹 → (추후)STEP 14 어려움/전체랭킹**.
 - 데이터 모델: `Game`에 `difficulty/mmrGain` 추가, **`Player` 엔티티 신설**(랭킹 정렬 키 = `mmr`).
 - ⚠️ 최대 변수는 **채팅방 식별자**: 코드 짜기 전에 실제 카카오 요청 JSON부터 찍어 확인.
 - 판정·MMR을 **순수 함수**로 분리해 테스트 커버리지·코드 품질 확보, **복합 인덱스**로 5초 제한 대비.
