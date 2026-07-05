@@ -23,16 +23,39 @@ data class SkillResponse(
         val outputs: List<Output>,
     )
 
-    /** outputs 원소. simpleText / basicCard 중 하나만 채운다. */
+    /** outputs 원소. simpleText / basicCard / textCard 중 하나만 채운다. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     data class Output(
         val simpleText: SimpleText? = null,
         val basicCard: BasicCard? = null,
+        val textCard: TextCard? = null,
     )
 
     data class SimpleText(
         val text: String,
     )
+
+    /**
+     * 텍스트 카드. 썸네일 없이 title/description + 버튼만 필요할 때 사용(예: 포기 응답).
+     * title/description 중 최소 하나 필수. 단일형은 합쳐 최대 400자.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    data class TextCard(
+        val title: String? = null,
+        val description: String? = null,
+        val buttons: List<Button>? = null,
+    ) {
+        init {
+            require(title != null || description != null) { "title/description 중 최소 하나는 필요합니다." }
+            title?.let { require(it.length <= BasicCard.TITLE_MAX) { "title은 ${BasicCard.TITLE_MAX}자 이하여야 합니다." } }
+            description?.let { require(it.length <= DESC_MAX) { "description은 ${DESC_MAX}자 이하여야 합니다." } }
+            buttons?.let { require(it.size <= BasicCard.BUTTON_MAX) { "buttons는 최대 ${BasicCard.BUTTON_MAX}개입니다." } }
+        }
+
+        companion object {
+            const val DESC_MAX = 400 // 단일형 title+description 합산 상한(간단히 description 단독 상한으로 검증)
+        }
+    }
 
     /**
      * 카카오 BasicCard. 썸네일은 필수, title/description/buttons는 선택.
@@ -94,6 +117,15 @@ data class SkillResponse(
             /** '메시지' 버튼: 누르면 messageText를 사용자가 입력한 것처럼 재발화한다. */
             fun message(label: String, messageText: String): Button =
                 Button(label = label, action = "message", messageText = messageText)
+
+            /**
+             * 오픈채팅 멘션 프리필용 버튼.
+             * 오픈채팅에서 message 버튼은 즉시 전송이 아니라 입력창에 "@봇 "을 프리필한다.
+             * messageText를 빈 문자열로 두어 멘션만 채워지게 하고, 유저가 값을 이어서 입력한다.
+             * (예: 숫자야구의 다음 추측 입력)
+             */
+            fun mentionPrefill(label: String): Button =
+                Button(label = label, action = "message", messageText = "")
         }
     }
 
@@ -110,6 +142,13 @@ data class SkillResponse(
             SkillResponse(
                 version = "2.0",
                 template = Template(listOf(Output(basicCard = card))),
+            )
+
+        /** TextCard(썸네일 없는 버튼 카드) 응답 한 개를 만드는 팩토리. */
+        fun textCard(card: TextCard): SkillResponse =
+            SkillResponse(
+                version = "2.0",
+                template = Template(listOf(Output(textCard = card))),
             )
     }
 }

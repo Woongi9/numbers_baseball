@@ -67,4 +67,51 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].basicCard.buttons[1].messageText") { value("랭킹") }
         }
     }
+
+    @Test
+    @DisplayName("오답(진행중) 응답은 멘션 프리필용 '제출' 버튼 하나를 가진다")
+    fun ongoingReturnsSubmitButton() {
+        val userId = "card-ongoing"
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("시작", userId)
+        }.andExpect { status { isOk() } }
+
+        val answer = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!.answer
+        val wrong = listOf("0123", "4567", "8901", "2345").first { it != answer }
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body(wrong, userId)
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.template.outputs[0].basicCard.thumbnail.fixedRatio") { value(true) }
+            jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(1) }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("message") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("") }
+        }
+    }
+
+    @Test
+    @DisplayName("포기 응답은 썸네일 없는 textCard + [게임 규칙, 시작] 버튼이다")
+    fun giveUpReturnsTextCard() {
+        val userId = "card-giveup"
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("시작", userId)
+        }.andExpect { status { isOk() } }
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("포기", userId)
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.template.outputs[0].basicCard") { doesNotExist() } // 썸네일 없음
+            jsonPath("$.template.outputs[0].textCard.title") { value("🏳️ 게임 포기") }
+            jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(2) }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].messageText") { value("게임 규칙") }
+            jsonPath("$.template.outputs[0].textCard.buttons[1].messageText") { value("시작") }
+        }
+    }
 }

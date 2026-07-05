@@ -63,6 +63,35 @@ class SkillResponseTest {
     }
 
     @Nested
+    @DisplayName("TextCard(썸네일 없는 버튼 카드)")
+    inner class TextCardSpec {
+
+        @Test
+        @DisplayName("textCard 응답은 basicCard/simpleText 키가 없다")
+        fun textCardShape() {
+            val card = SkillResponse.TextCard(
+                title = "🏳️ 게임 포기",
+                description = "정답은 1234 였습니다.",
+                buttons = listOf(SkillResponse.Button.message("시작", "시작")),
+            )
+            val output = mapper.readTree(mapper.writeValueAsString(SkillResponse.textCard(card)))["template"]["outputs"][0]
+
+            assertFalse(output.has("basicCard"))
+            assertFalse(output.has("simpleText"))
+            assertEquals("🏳️ 게임 포기", output["textCard"]["title"].asText())
+            assertEquals(1, output["textCard"]["buttons"].size())
+        }
+
+        @Test
+        @DisplayName("title·description이 모두 없으면 예외")
+        fun rejectEmpty() {
+            assertThrows(IllegalArgumentException::class.java) {
+                SkillResponse.TextCard()
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("생성 시점 규격 검증(fail-fast)")
     inner class Validation {
 

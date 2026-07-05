@@ -32,6 +32,9 @@ class SkillController(
         OUT("out.png"),       // 0S 0B
         ANSWER("answer.png"), // 정답(승리)
     }
+
+    /** 카드(BasicCard/TextCard) 노출 여부. 이미지 URL이 설정된 환경(prod/local)에서만 카드를 쓴다. */
+    private val cardsEnabled: Boolean get() = imageBaseUrl.isNotBlank()
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
      * 카카오 5초 타임아웃 안에 끝나야 하므로 무거운 작업은 두지 않는다.
@@ -53,7 +56,7 @@ class SkillController(
      * 입력 규칙 위반·진행중 게임 없음 등은 예외로 던지고, SkillExceptionHandler 가 안내 메시지로 변환한다.
      * (예외를 여기서 삼키지 않아야 LogTraceAspect 가 실패를 관측할 수 있다 — 9-F 증상 4)
      *
-     * 카드 전환 범위: START(게임 시작)·GUESS(추측: 승리/진행)만 BasicCard, 나머지는 simpleText.
+     * 카드 전환 범위: START(시작)·GUESS(추측)은 BasicCard(썸네일), GIVEUP(포기)은 TextCard(썸네일 없음), RANKING/RULES/HELP은 simpleText.
      */
     private fun handle(userId: String, botKey: String?, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
@@ -74,7 +77,16 @@ class SkillController(
 
             SkillCommand.GIVEUP -> {
                 val answer = gameService.giveUp(userId)
-                SkillResponse.text("게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요.")
+                // 포기는 썸네일 없이 버튼만 필요 → 이미지 없는 textCard 사용(패배 이미지 미준비).
+                textCardOrText(
+                    title = "🏳️ 게임 포기",
+                    description = "정답은 $answer 였습니다. 다시 도전해보세요!",
+                    buttons = listOf(
+                        SkillResponse.Button.message("게임 규칙", "게임 규칙"),
+                        SkillResponse.Button.message("시작", "시작"),
+                    ),
+                    fallbackText = "게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요.",
+                )
             }
 
             SkillCommand.RANKING -> SkillResponse.text(formatRanking(botKey))
@@ -88,8 +100,8 @@ class SkillController(
 
     /**
      * 추측 결과를 카드/텍스트로 변환한다.
-     * - 승리: win 썸네일 + [다시 도전, 랭킹 보기]
-     * - 진행중(오답/아웃): playing 썸네일 + [포기]
+     * - 승리: answer 썸네일 + [새 게임 시작, 랭킹]
+     * - 진행중: 아웃/스트라이크/볼 썸네일 + [제출](오픈채팅 멘션 프리필용)
      * 폴백 문구는 기존 simpleText와 동일하게 유지(하위 호환·테스트 안정).
      */
     private fun formatGuess(outcome: GuessOutcome): SkillResponse {
@@ -123,9 +135,10 @@ class SkillController(
         return cardOrText(
             image = image,
             title = sb,
-            // 추측은 버튼으로 못 넣는다(가변 입력 프리필 액션이 카카오에 없음) → 채팅창 입력을 안내.
-            description = "${outcome.tries}번째 시도예요. 다음 숫자를 채팅창에 입력하세요. (예: 7428)",
-            buttons = emptyList(), // 진행중 카드는 버튼 없음
+            description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
+            // 오픈채팅에선 message 버튼 클릭 시 "@봇 "이 입력창에 프리필된다(즉시 전송 아님).
+            // messageText를 빈 값으로 두어 멘션만 깔끔히 채워지도록 한다(실제 프리필 내용은 오픈채팅 테스트로 확인).
+            buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
             // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
             fallbackText = "${outcome.tries}번째 시도: $sb",
         )
@@ -142,7 +155,7 @@ class SkillController(
         buttons: List<SkillResponse.Button>,
         fallbackText: String,
     ): SkillResponse {
-        if (imageBaseUrl.isBlank()) return SkillResponse.text(fallbackText)
+        if (!cardsEnabled) return SkillResponse.text(fallbackText)
         val card = SkillResponse.BasicCard(
             thumbnail = SkillResponse.Thumbnail(
                 imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}",
@@ -154,6 +167,25 @@ class SkillController(
             buttons = buttons.ifEmpty { null },
         )
         return SkillResponse.card(card)
+    }
+
+    /**
+     * 썸네일 없는 TextCard(버튼 카드)로 변환한다. 카드 비활성(테스트/기본)이면 simpleText 폴백.
+     * title/description은 스펙 상한(50/400자) 내로 잘라 생성 시점 예외를 피한다.
+     */
+    private fun textCardOrText(
+        title: String,
+        description: String,
+        buttons: List<SkillResponse.Button>,
+        fallbackText: String,
+    ): SkillResponse {
+        if (!cardsEnabled) return SkillResponse.text(fallbackText)
+        val card = SkillResponse.TextCard(
+            title = title.take(SkillResponse.BasicCard.TITLE_MAX),
+            description = description.take(SkillResponse.TextCard.DESC_MAX),
+            buttons = buttons.ifEmpty { null },
+        )
+        return SkillResponse.textCard(card)
     }
 
     /**
