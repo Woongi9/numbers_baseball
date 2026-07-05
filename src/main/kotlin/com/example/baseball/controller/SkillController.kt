@@ -10,6 +10,7 @@ import com.example.baseball.service.RankTitle
 import com.example.baseball.service.RankingService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
@@ -19,7 +20,18 @@ import org.springframework.web.bind.annotation.RestController
 class SkillController(
     private val gameService: GameService,
     private val rankingService: RankingService,
+    // 썸네일 이미지 베이스 URL. 비어 있으면(로컬/테스트 기본값) BasicCard 대신 simpleText로 폴백한다.
+    // prod에서만 실제 URL(https://numbers-baseball.com/images)을 주입해 카드로 노출한다.
+    @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
 ) {
+    /** 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다. */
+    private enum class ResultImage(val file: String) {
+        START("start.png"),
+        STRIKE("strike.png"), // 스트라이크 1개 이상
+        BALL("ball.png"),     // 스트라이크 0 + 볼 1개 이상
+        OUT("out.png"),       // 0S 0B
+        ANSWER("answer.png"), // 정답(승리)
+    }
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
      * 카카오 5초 타임아웃 안에 끝나야 하므로 무거운 작업은 두지 않는다.
@@ -33,51 +45,115 @@ class SkillController(
         val userId = request.userRequest.user.id
         val botKey = request.userRequest.chat?.properties?.botGroupKey
         val utterance = request.userRequest.utterance.trim()
-        return SkillResponse.text(handle(userId, botKey, utterance))
+        return handle(userId, botKey, utterance)
     }
 
     /**
      * utterance를 명령으로 분기한다.
      * 입력 규칙 위반·진행중 게임 없음 등은 예외로 던지고, SkillExceptionHandler 가 안내 메시지로 변환한다.
      * (예외를 여기서 삼키지 않아야 LogTraceAspect 가 실패를 관측할 수 있다 — 9-F 증상 4)
+     *
+     * 카드 전환 범위: START(게임 시작)·GUESS(추측: 승리/진행)만 BasicCard, 나머지는 simpleText.
      */
-    private fun handle(userId: String, botKey: String?, utterance: String): String =
+    private fun handle(userId: String, botKey: String?, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
             SkillCommand.START -> {
                 gameService.startGame(userId, botKey)
-                "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
+                val text = "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
+                cardOrText(
+                    image = ResultImage.START,
+                    title = "⚾ 새 게임 시작",
+                    description = text,
+                    buttons = listOf(
+                        SkillResponse.Button.message("게임 규칙", "게임 규칙"),
+                        SkillResponse.Button.message("포기", "포기"),
+                    ),
+                    fallbackText = text,
+                )
             }
 
             SkillCommand.GIVEUP -> {
                 val answer = gameService.giveUp(userId)
-                "게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요."
+                SkillResponse.text("게임을 포기했습니다. 정답은 $answer 였습니다. '시작'으로 다시 도전하세요.")
             }
 
-            SkillCommand.RANKING -> formatRanking(botKey)
+            SkillCommand.RANKING -> SkillResponse.text(formatRanking(botKey))
 
             SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
 
-            SkillCommand.RULES -> rulesMessage()
+            SkillCommand.RULES -> SkillResponse.text(rulesMessage())
 
-            SkillCommand.HELP -> helpMessage()
+            SkillCommand.HELP -> SkillResponse.text(helpMessage())
         }
 
-    private fun formatGuess(outcome: GuessOutcome): String {
+    /**
+     * 추측 결과를 카드/텍스트로 변환한다.
+     * - 승리: win 썸네일 + [다시 도전, 랭킹 보기]
+     * - 진행중(오답/아웃): playing 썸네일 + [포기]
+     * 폴백 문구는 기존 simpleText와 동일하게 유지(하위 호환·테스트 안정).
+     */
+    private fun formatGuess(outcome: GuessOutcome): SkillResponse {
         val r = outcome.result
-        return when {
-            r.isWin -> {
-                val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
-                buildString {
-                    appendLine(winHeadline(outcome.tries))
-                    appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
-                    // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
-                    outcome.percentile?.let { appendLine(percentileLine(it)) }
-                    append("'시작'으로 다시 도전하세요!")
-                }
+        if (r.isWin) {
+            val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
+            val headline = winHeadline(outcome.tries)
+            val body = buildString {
+                appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
+                // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
+                outcome.percentile?.let { appendLine(percentileLine(it)) }
+                append("'시작'으로 다시 도전하세요!")
             }
-            r.isOut -> "${outcome.tries}번째 시도: OUT (0S 0B)"
-            else -> "${outcome.tries}번째 시도: ${r.strike}S ${r.ball}B"
+            return cardOrText(
+                image = ResultImage.ANSWER,
+                title = headline,
+                description = body,
+                buttons = listOf(
+                    SkillResponse.Button.message("새 게임 시작", "시작"),
+                    SkillResponse.Button.message("랭킹", "랭킹"),
+                ),
+                fallbackText = "$headline\n$body",
+            )
         }
+        // 진행중: 아웃(0S0B) → 스트라이크(1개+) → 볼 순으로 썸네일을 고른다.
+        val (image, sb) = when {
+            r.isOut -> ResultImage.OUT to "OUT (0S 0B)"
+            r.strike > 0 -> ResultImage.STRIKE to "${r.strike}S ${r.ball}B"
+            else -> ResultImage.BALL to "0S ${r.ball}B"
+        }
+        return cardOrText(
+            image = image,
+            title = sb,
+            // 추측은 버튼으로 못 넣는다(가변 입력 프리필 액션이 카카오에 없음) → 채팅창 입력을 안내.
+            description = "${outcome.tries}번째 시도예요. 다음 숫자를 채팅창에 입력하세요. (예: 7428)",
+            buttons = emptyList(), // 진행중 카드는 버튼 없음
+            // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
+            fallbackText = "${outcome.tries}번째 시도: $sb",
+        )
+    }
+
+    /**
+     * 이미지 URL이 설정돼 있으면 BasicCard, 아니면 simpleText로 폴백한다(썸네일 필수라 미준비 시 응답 누락 방지).
+     * title/description은 스펙 상한(50/230자) 내로 잘라 생성 시점 예외를 피한다.
+     */
+    private fun cardOrText(
+        image: ResultImage,
+        title: String,
+        description: String,
+        buttons: List<SkillResponse.Button>,
+        fallbackText: String,
+    ): SkillResponse {
+        if (imageBaseUrl.isBlank()) return SkillResponse.text(fallbackText)
+        val card = SkillResponse.BasicCard(
+            thumbnail = SkillResponse.Thumbnail(
+                imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}",
+                altText = title.take(SkillResponse.BasicCard.TITLE_MAX),
+                fixedRatio = true, // 이미지가 1:1(800×800)이라 크롭 방지 + 버튼 가로 최대 2개
+            ),
+            title = title.take(SkillResponse.BasicCard.TITLE_MAX),
+            description = description.take(SkillResponse.BasicCard.DESC_MAX),
+            buttons = buttons.ifEmpty { null },
+        )
+        return SkillResponse.card(card)
     }
 
     /**

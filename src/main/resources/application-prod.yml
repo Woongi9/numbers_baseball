@@ -10,6 +10,11 @@ logging:
   file:
     name: /home/ubuntu/logs/server.log   # CloudWatch Agent 가 이 파일을 수집
 
+# 카카오 BasicCard 썸네일 베이스 URL. 값이 있으면 판정/시작 응답이 카드로 나간다.
+# 필요 시 서버 환경변수 KAKAO_IMAGE_BASE_URL 로 오버라이드(도메인 변경 대비).
+kakao:
+  image-base-url: ${KAKAO_IMAGE_BASE_URL:https://numbers-baseball.com/images}
+
 spring:
   application:
     name: 운영-숫자야구
