@@ -338,7 +338,7 @@ git push -u origin develop
 - `develop` push → Actions "Deploy Dev" 워크플로가 도는지 확인.
 
 ### 10-⑧ 배포 후 검증
-- [ ] `curl https://dev.numbers-baseball.com/actuator/health` → `{"status":"UP"}`
-- [ ] `systemctl status baseball` (prod)와 `systemctl status baseball-dev` (dev) 둘 다 active — 서로 영향 없는지 확인
-- [ ] `free -h`로 두 JVM 동시 구동 시 메모리 여유 확인(압박 보이면 STEP 13-B 결정사항대로 힙↓ 또는 t4g.medium 검토)
-- [ ] `main` push(prod 배포)와 `develop` push(dev 배포)를 각각 트리거해 두 워크플로가 서로 취소/간섭하지 않는지 확인
+- [X] `curl https://dev.numbers-baseball.com/actuator/health` → `{"status":"UP"}`
+- [X] `systemctl status baseball` (prod)와 `systemctl status baseball-dev` (dev) 둘 다 active — 서로 영향 없는지 확인
+- [X] `free -h`로 두 JVM 동시 구동 시 메모리 여유 확인(압박 보이면 STEP 13-B 결정사항대로 힙↓ 또는 t4g.medium 검토)
+- [X] `main` push(prod 배포)와 `develop` push(dev 배포)를 각각 트리거해 두 워크플로가 서로 취소/간섭하지 않는지 확인
