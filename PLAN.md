@@ -518,64 +518,127 @@ SELECT COUNT(*) FROM users;
 
 > **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons. ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증, ③1:1 이미지는 `fixedRatio=true`(버튼 가로 최대 2), ④오픈채팅에선 `message` 버튼이 `@봇 ` 프리필. 코드 완료 → 배포 검증만 남음.
 
-### 🟢 STEP 13. [인프라-확장] dev/prod 2-티어 배포 + 출시 전 부하 테스트 (2026-07-05 추가)
+### 🟢 STEP 13. [인프라] 배포 전 기능 검증 + 출시 전 부하 테스트 (2026-07-05 추가, 2026-07-07 방향 수정)
 
-> **목표**: INF-2(단일 prod EC2+RDS)·INF-3(`main`→prod 자동배포) 위에 **dev 티어**를 얹어, `develop`에서 검증 → `main`으로 승격하는 2-티어 배포 파이프라인을 만든다. 그리고 **실서비스 오픈 전** prod에 부하 테스트를 1회 수행한다.
-> **배경**: 초기엔 "단일 EC2에 dev/prod 포트 분리" 검토 → **노이지 네이버(자원 경쟁)** 이슈로 **EC2 물리 분리**로 방향 전환(2026-07-05 논의 결과). 부하 테스트도 "측정 대상과 부하 생성기를 분리"가 핵심.
+> **결정 변경(2026-07-07): 별도 dev EC2 티어는 만들지 않는다.**
+> 이유: 아직 실사용자가 0명인 출시 전 단계라, 아래 부하 테스트 항목이 안전한 것과 **같은 논리**(오픈 전엔 prod를 건드려도 실사용자 피해가 없음)가 배포 기능 검증에도 그대로 적용된다. 별도 서버를 상시 유지하는 비용·운영 부담 대비 얻는 이득이 적고, 기존 배포 스크립트(`stop.sh`→`start.sh`, 헬스체크 실패 시 자동 롤백)가 이미 "후보 빌드를 순차적으로 검증하고 실패하면 되돌리는" 안전망 역할을 하고 있어 추가 인프라 없이도 목적을 달성한다.
+> **메모리 우려도 해소**: dev/prod를 **동시에** 띄우는 구성이었다면 t4g.small(2GB)에서 JVM 두 개가 경쟁해 노이지 네이버 문제가 생기지만, 지금 방식은 **순차 교체**(기존 것 stop → 새 jar start)라 항상 JVM 1개만 뜬다. 기존 JVM 메모리 가이드(`-Xms512m -Xmx1g`)로 충분.
+> ⚠️ **이 패턴은 출시 전(실사용자 0)에서만 안전하다.** 오픈 이후엔 절대 이 방식으로 되돌아가지 말 것 — 그때는 실사용자가 배포 실험의 부작용을 그대로 받는다.
 
-**계획 흐름 (사용자 확정 5단계)**
+**계획 흐름 (수정)**
 ```
-1. 저사양 dev EC2 생성 + RDS 스키마 `numbers-baseball-dev` 연결
-2. develop 브랜치 push → dev EC2 자동 배포 (branch 기반 CD)
-3. dev에서 기능 검증 (dev/prod 두 환경 기동 확인)
-4. 실서비스 오픈 전 → prod EC2에 부하 테스트 (실사용자 0 → 안전)
-5. prod 배포 및 실서비스 오픈
+1. main 배포(기존 CD 그대로: test → bootJar → scp → stop/start → 헬스체크/자동롤백)
+2. 배포 직후 수동 스모크 테스트 — 시작 → 추측 → 포기 → 랭킹 순서로 실제 카카오톡(또는 curl)로 확인
+3. 문제 있으면 이전 커밋으로 재배포(헬스체크 실패는 이미 자동 롤백됨)
+4. 문제 없음 확인되면 → 실서비스 오픈 전 prod EC2에 부하 테스트 1회 수행(부하 생성기는 별도 머신)
+5. 부하 테스트로 쌓인 더미 데이터 정리 → 카카오 오픈빌더 스킬 URL 연결 → 실서비스 오픈
 ```
 
 #### 🔎 피드백 (우선순위별)
 
 **🔴 중요 (반드시 반영)**
-- [ ] **branch→환경 매핑 명시** — 기존 워크플로는 `main`→prod 하나뿐. dev 티어 추가 시 `develop`→dev EC2 워크플로가 **별도로** 필요. 두 워크플로(또는 `on.push.branches`로 분기 + 대상 Secret 분리)로 **브랜치별 배포 대상**을 고정한다. 뒤섞이면 dev 코드가 prod로 나가는 사고 가능.
-
-  | 브랜치 | 배포 대상 | 프로파일 | Secret |
-  |--------|----------|---------|--------|
-  | `develop` | dev EC2 | `dev` | `DEV_EC2_HOST` / `DEV_EC2_SSH_KEY` |
-  | `main` | prod EC2 | `prod` | `EC2_HOST` / `EC2_SSH_KEY` |
-
-- [ ] **dev/prod DB를 같은 RDS 인스턴스로 둘지 결정** — 사용자 안(`numbers-baseball-dev` 스키마)은 **같은 RDS에 DB만 분리**하는 방식으로 이해. 평상시 개발엔 dev 발자국이 작아 OK(비용 이득). **단 STEP 4 부하 테스트 시**: prod DB를 때리면 같은 RDS 인스턴스의 **버퍼풀·커넥션·IOPS를 공유**하므로 dev DB(=본인 개발 작업)가 느려짐. 출시 전이라 실사용자 피해는 없지만, 테스트 창 동안 개발이 막힐 수 있음을 인지.
-- [ ] **⚠️ 출시 후 부하 테스트는 별도 처리** — STEP 4 부하 테스트가 안전한 건 **오직 출시 전(사용자 0)**이기 때문. 오픈(STEP 5) **이후** 재부하 테스트가 필요하면, 같은 RDS를 때리면 실사용자에게 버퍼풀 축출로 지연 전파 → 그땐 **일회용 RDS 생성→테스트→삭제**로 격리할 것.
+- [x] **(결정) 별도 dev EC2 티어 제외** — 위 결정 노트 참고. `develop`→dev 배포 워크플로, dev RDS 스키마 분리 등 기존 하위 항목은 전부 불필요해짐.
+- [ ] **배포 직후 스모크 테스트 체크리스트 고정** — "시작 → 추측(오답 1회) → 추측(정답) → 랭킹" 순서를 배포 후 매번 동일하게 확인(수동이라도 순서가 흔들리면 회귀를 놓침).
+- [ ] **오픈 이후엔 이 패턴 사용 금지 규칙 명시** — 실사용자가 생긴 뒤 같은 방식(운영 서버에 후보 빌드 직접 검증)을 반복하면 실사용자가 실험 부작용을 받는다. 오픈 후 필요한 실험은 임시 인스턴스로 격리(STEP 16 운영 강화에서 재검토).
 
 **🟡 경고 (하는 게 좋음)**
-- [ ] **부하 생성기(k6/JMeter)는 측정 대상과 분리** — dev EC2나 prod EC2 **안에서** 부하를 만들면 측정값이 오염(박스 한계를 재게 됨). 로컬 PC나 **별도 임시 인스턴스**에서 prod 도메인을 때린다.
-- [ ] **출시 전 테스트 데이터 정리** — 부하로 prod DB에 쌓인 더미 데이터를 오픈 전 초기화. 시즌 리셋(STEP F)이 있으니 **월 1일 리셋 타이밍에 빈 상태로 오픈**하는 게 가장 단순.
-- [ ] **dev EC2 상시 가동 불필요** — dev는 트래픽이 없으니 개발할 때만 start/stop(또는 필요 시 기동)해 비용 절감. `t3.micro`/`t3.small`로 충분(부하 생성 용도로는 쓰지 않으므로 저사양 OK).
+- [ ] **부하 생성기(k6/JMeter)는 측정 대상과 분리** — prod EC2 **안에서** 부하를 만들면 측정값이 오염(박스 한계를 재게 됨). 로컬 PC나 **별도 임시 인스턴스**에서 prod 도메인을 때린다.
+- [ ] **출시 전 테스트 데이터 정리** — 부하·스모크 테스트로 prod DB에 쌓인 더미 데이터를 오픈 전 초기화. 시즌 리셋(6-B)이 있으니 **월 1일 리셋 타이밍에 빈 상태로 오픈**하는 게 가장 단순.
 
 **🟢 제안 (개선 고려)**
-- [ ] **`dev` 프로파일 추가** — `resources-env/dev/application.yml` 신설(dev RDS 엔드포인트, `ddl-auto: update` 허용 가능). prod는 `validate` 유지. → local/test/dev/prod 4-프로파일 체계.
 - [ ] **부하 테스트 지표 정의** — RPS, **p95/p99 지연**, 에러율, 그리고 **카카오 5초 타임아웃** 초과율을 핵심 지표로. "몇 동시 사용자까지 5초 내 응답"이 합격선.
-- [ ] **dev SG는 SSH도 내 IP만** — dev EC2도 22번은 내 IP로 제한, dev RDS 접근은 `sg-dev-ec2` 참조(INF-2 원칙 동일 적용).
 
-#### 내부 동작 순서 (2-티어 배포 흐름)
+#### 내부 동작 순서 (수정된 배포 전 검증 흐름)
 ```
-[feature 작업] → develop 병합/푸시
-   └─▶ Actions(dev): test(H2) → bootJar(-Pprofile=dev) → scp → dev EC2 restart → 헬스체크
-        └─▶ dev에서 기능 검증 (dev RDS `numbers-baseball-dev`)
-             └─▶ (출시 전) prod EC2에 부하 테스트 [부하생성기=별도 머신]
-                  └─▶ develop → main 승격(PR merge)
-                       └─▶ Actions(prod): test → bootJar(-Pprofile=prod) → scp → prod EC2 restart → 헬스체크
-                            └─▶ 데이터 초기화 확인 → 실서비스 오픈
+[feature 작업] → main 병합/푸시
+   └─▶ Actions(prod): test(H2) → bootJar(-Pprofile=prod) → scp → prod EC2 stop→start → 헬스체크(실패 시 자동 롤백)
+        └─▶ 배포 직후 수동 스모크 테스트(시작→추측→포기→랭킹) — 실사용자 0이라 안전
+             └─▶ (출시 전, 1회) prod EC2에 부하 테스트 [부하생성기=별도 머신]
+                  └─▶ 부하 테스트로 쌓인 더미 데이터 정리(월초 리셋 타이밍과 맞추면 단순)
+                       └─▶ 카카오 오픈빌더 스킬 URL 연결 → 실서비스 오픈
 ```
 
 **산출물/검증**
 
 | 항목 | 산출물 | 검증 |
 |------|--------|------|
-| dev 환경 | dev EC2, `numbers-baseball-dev` DB, `dev` 프로파일 | dev 도메인 `curl` 정답 + dev RDS row 적재 |
-| dev CD | `.github/workflows/deploy-dev.yml` | `develop` 푸시 → dev 자동배포+헬스체크 |
+| 배포 전 검증 | 기존 CD(`deploy.yml`) + 스모크 테스트 체크리스트 | 배포 후 시작/추측/포기/랭킹 발화 정상 응답 |
 | 부하 테스트 | k6 스크립트, 결과 리포트(p95·에러율·5초초과율) | 목표 동시성에서 5초 내 응답 유지 확인 |
 | 오픈 | prod 데이터 초기화 | 더미 데이터 0 + 카카오 봇 정상 응답 |
 
-> **한 줄 요약**: 구조는 타당함. 다만 ①**브랜치별 배포 대상 고정**, ②**부하 생성기 분리**, ③**출시 후 부하 테스트는 일회용 RDS** — 이 3가지만 지키면 문제없음.
+> **한 줄 요약**: 실사용자 0명인 출시 전 구간에선 prod EC2 자체가 곧 안전한 테스트 환경(부하 테스트와 같은 논리) — 별도 dev 티어 없이 기존 CD(순차 교체+헬스체크+자동롤백)로 충분하다. 메모리도 JVM을 동시에 두 개 띄우지 않으므로 문제없음. 단, **오픈 이후엔 이 패턴을 쓰지 않는다.**
+
+### 🟢 STEP 13-B. [인프라] 같은 EC2 위 dev 포트(9090) + `develop` 브랜치 자동 배포 (2026-07-07 추가)
+
+> **목표**: 새 EC2/RDS를 만들지 않고, **기존 t4g.small EC2 위에서 prod(8080)와 병행**으로 dev 인스턴스(9090)를 띄운다. `develop` push → dev 자동 배포, `main` push → prod 자동 배포(기존 그대로)로 분리해, 머지 전에 실제 서버(+선택적으로 실제 카카오 테스트봇)로 회귀를 상시 확인한다.
+> STEP 13의 "별도 dev 서버는 안 만든다"는 결정과 배치되지 않는다 — **새 EC2를 만드는 게 아니라 같은 박스에서 포트만 나누는 것**이라 인스턴스 비용 증가가 없다. 다만 STEP 13이 "출시 전엔 prod를 직접 써도 안전하다"는 **일회성 검증** 전략이었다면, 이건 `develop` 브랜치가 있는 한 **상시로 유지되는 두 번째 프로세스**라는 점이 다르다 → 메모리를 반드시 나눠 써야 한다.
+
+**결정 사항 (2026-07-07, 사용자 확정)**
+| 항목 | 결정 |
+|------|------|
+| EC2 사양 | **t4g.small(2GB) 유지.** dev JVM 힙을 작게 잡아(예: `-Xms128m -Xmx384m`) 여유 확보. 압박 신호 보이면 그때 t4g.medium 전환 |
+| dev DB | **같은 RDS 인스턴스에 별도 스키마(`baseball_dev`)** 추가. 새 RDS 없음 → 비용 0, prod와 동일 MySQL dialect 유지 |
+| 외부 노출 | 이미 보유한 **Cloudflare `numbers-baseball.com`** 서브도메인 활용 — `numbers-baseball.com`(기존, 8080) 그대로 두고 **`dev.numbers-baseball.com` 신설 → 9090** |
+
+**아키텍처**
+```
+[Cloudflare DNS]
+  numbers-baseball.com      → EIP  (기존, 변경 없음)
+  dev.numbers-baseball.com  → EIP  (신규 레코드 추가)
+
+[EC2 1대, t4g.small — 변경 없음]
+  Nginx
+    numbers-baseball.com      → localhost:8080  (기존 baseball.service)
+    dev.numbers-baseball.com  → localhost:9090  (신규 baseball-dev.service)
+  systemd
+    baseball      (prod, SPRING_PROFILES_ACTIVE=prod)                — 기존 그대로
+    baseball-dev  (dev,  SPRING_PROFILES_ACTIVE=dev, 힙 작게)          — 신규
+
+[RDS 1대 — 변경 없음]
+  schema `baseball`      ← prod (기존)
+  schema `baseball_dev`  ← dev (신규 스키마만 추가)
+```
+
+#### 🔎 필요 변경사항 체크리스트
+
+**🔴 필수**
+- [ ] **`build.gradle.kts` jar 이름 분기** — 현재 `tasks.bootJar { archiveFileName.set("baseball.jar") }`가 프로파일과 무관하게 고정돼 있어, dev 빌드도 같은 파일명이 나온다. `profile == "dev"`일 때 `baseball-dev.jar`로 분기해야 prod 배포 스크립트와 파일이 섞이지 않는다.
+- [x] **`src/main/resources/application-dev.yml` 신설** — `application-prod.yml`과 동일한 패턴(비밀은 담지 않고 `${DB_URL}` 등 env var로 주입). `server.port: 9090`, `DB_URL`을 `baseball_dev` 스키마로, `ddl-auto: update`(dev는 스키마 변경 자유), 이미지 베이스 URL은 `https://dev.numbers-baseball.com/images`, 로그 파일은 `server-dev.log`로 분리, Swagger는 켜둠. (2026-07-07 완료 — `resources-env/dev`가 아니라 prod와 같은 위치에 둔 이유: prod처럼 `SPRING_PROFILES_ACTIVE=dev` 런타임 활성화만으로 로드되므로 build-time 리소스 스위칭이 필요 없고, `resources-env/**`가 기본 gitignore 대상이라 그대로 두면 커밋에서 빠질 뻔했다.)
+- [ ] **RDS에 `baseball_dev` 스키마 생성 + 계정 권한 부여** — 콘솔/mysql client에서 1회 수행(`CREATE DATABASE baseball_dev; GRANT ... TO 'woong'@'%';` 형태). 기존 계정을 그대로 쓸지 dev 전용 계정을 팔지는 구현 시 결정.
+- [ ] **`deploy/baseball-dev.service` systemd 유닛 신설** — `EnvironmentFile`은 prod와 분리(`baseball-dev.env` 또는 같은 파일에 dev용 변수 추가), `Environment=SPRING_PROFILES_ACTIVE=dev`, `ExecStart=... -Xms128m -Xmx384m -jar /home/ubuntu/baseball-dev.jar`, 별도 유닛이라 `systemctl start/stop baseball-dev`로 prod와 독립적으로 제어된다.
+- [ ] **`deploy/nginx-baseball.conf`에 `dev.numbers-baseball.com` 서버 블록 추가** — 9090으로 프록시. 인증서는 현재 prod가 Cloudflare/certbot 중 어떤 방식으로 발급돼 있는지 서버에서 먼저 확인한 뒤, 같은 방식으로 서브도메인용을 추가 발급(Cloudflare 프록시를 쓰면 오리진 인증서 없이도 될 수 있음 — 서버 실제 설정 확인 필요).
+- [ ] **Cloudflare DNS에 `dev` 서브도메인 레코드 추가**.
+- [ ] **`deploy/scripts`를 dev와 공유 불가 — 분리 필요** — 현재 `start.sh`/`stop.sh`는 `SERVICE="baseball"`, `LIVE_JAR=.../baseball.jar`, `HEALTH_URL=http://localhost:8080/...`가 하드코딩돼 있어 그대로 재사용하면 prod를 건드린다. `start-dev.sh`/`stop-dev.sh`로 복제하거나(가장 단순, 지금 방식과 일관), 인자로 서비스명/포트를 받는 공용 스크립트로 리팩터링(중복 제거) 중 택1 — 이번엔 기존 스크립트가 아주 단순하므로 **복제** 쪽을 우선 고려.
+- [ ] **`.github/workflows/deploy-dev.yml` 신설** — `on.push.branches: [develop]`, `concurrency.group: deploy-dev`(prod의 `deploy-prod`와 별도 그룹이라 서로 취소하지 않음), `./gradlew clean test bootJar -Pprofile=dev`, `baseball-dev.jar` 업로드, `start-dev.sh`/`stop-dev.sh` 실행. 기존 `deploy.yml`(main→prod)은 손대지 않는다.
+
+**🟡 권장**
+- [ ] **sudoers에 `baseball-dev` start/stop/restart NOPASSWD 추가** — 기존 `baseball` 3종과 동일 패턴으로 `systemctl ... baseball-dev`도 등록.
+- [ ] **dev 힙 사이즈 실측 후 조정** — 배포 직후 `free -h`(또는 CloudWatch `mem_used_percent`)로 두 JVM 동시 구동 시 여유를 확인하고, 압박 보이면 힙을 더 줄이거나 t4g.medium 전환을 검토.
+- [ ] **dev 배포도 헬스체크 실패 시 자동 롤백** — prod의 `start.sh`와 동일한 안전장치(`baseball-dev.jar.bak`)를 dev에도 그대로 적용.
+
+**🟢 향후**
+- [ ] **dev 전용 카카오 테스트 채널(오픈빌더 봇)** — `dev.numbers-baseball.com/skill/play`를 스킬 URL로 등록한 별도 테스트봇을 만들면, `develop` 단계에서 실제 카톡 UX까지 회귀 확인 가능해진다(자동 배포 자체와는 별개로, 필요할 때 수동 연결).
+
+#### 내부 동작 순서
+```
+[feature 작업] → develop 병합/푸시
+   └─▶ Actions(dev): test(H2) → bootJar(-Pprofile=dev, baseball-dev.jar) → scp
+        → EC2: stop-dev.sh → start-dev.sh(9090 기동 + 헬스체크, 실패 시 롤백)
+             └─▶ dev.numbers-baseball.com 으로 회귀 확인(자동 curl + 필요 시 카카오 테스트봇 수동 확인)
+                  └─▶ develop → main 승격(PR merge)
+                       └─▶ Actions(prod, 기존 그대로): test → bootJar(prod) → scp → stop.sh → start.sh(8080)
+                            └─▶ numbers-baseball.com 정상 확인 → STEP 13 부하테스트/오픈 절차로 이어짐
+```
+
+**산출물/검증**
+
+| 항목 | 산출물 | 검증 |
+|------|--------|------|
+| dev 앱 | `baseball-dev.jar`, `dev` 프로파일, `baseball_dev` 스키마 | `curl https://dev.numbers-baseball.com/actuator/health` → `UP` |
+| dev CD | `.github/workflows/deploy-dev.yml` | `develop` 푸시 → 자동 배포 + 헬스체크(실패 시 롤백), prod 배포와 서로 간섭 없음 |
+| 병행 운영 | `baseball` + `baseball-dev` 동시 구동 | `free -h`/CloudWatch `mem_used_percent`로 여유 확인, 압박 시 t4g.medium 전환 |
+
+> **한 줄 요약**: 새 서버 없이 기존 EC2·RDS 위에 **포트(9090)·스키마(`baseball_dev`)·서브도메인(`dev.numbers-baseball.com`)만 추가**해 `develop` 전용 CD를 만든다. 메모리는 dev 힙을 작게 잡고 시작 → 실측 후 필요하면 인스턴스 업그레이드. `deploy/scripts`와 systemd 유닛은 prod와 이름이 겹치지 않게 반드시 분리한다(안 그러면 dev 배포가 prod를 건드림).
 
 ### 🟡 STEP 14. [고도화-추후] 어려움 모드(판정부) / 전체 랭킹
 - [x] 어려움 모드 **정답 생성** — `GameDifficulty.symbols`로 HARD(`a~e`)/EASY 후보 주입 완료

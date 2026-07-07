@@ -40,13 +40,15 @@ kotlin {
     jvmToolchain(21)
 }
 
-// 배포 시 파일명을 고정해 스크립트를 단순화 (build/libs/baseball.jar)
-tasks.bootJar {
-    archiveFileName.set("baseball.jar")
-}
-
 // -P profile=dev 로 넘기지 않으면 local. 빈 문자열도 local 처리.
 val profile = (project.findProperty("profile") as String?)?.takeIf { it.isNotBlank() } ?: "local"
+
+// 배포 시 파일명을 고정해 스크립트를 단순화 (build/libs/baseball.jar).
+// dev 프로파일만 baseball-dev.jar로 분리 — 같은 EC2에서 prod(baseball.jar)와 나란히
+// 배포되므로 파일명이 같으면 dev 배포가 prod 산출물을 덮어쓴다(STEP 13-B).
+tasks.bootJar {
+    archiveFileName.set(if (profile == "dev") "baseball-dev.jar" else "baseball.jar")
+}
 
 sourceSets {
     main {

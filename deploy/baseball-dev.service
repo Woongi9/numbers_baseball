@@ -1,0 +1,26 @@
+# systemd 유닛 — 서버 배치: /etc/systemd/system/baseball-dev.service
+# prod(baseball.service)와 같은 EC2에서 나란히 떠 있는 dev 인스턴스(9090). STEP 13-B.
+# 적용:
+#   sudo cp deploy/baseball-dev.service /etc/systemd/system/baseball-dev.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now baseball-dev
+[Unit]
+Description=Numbers Baseball - dev (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+# prod와 완전히 분리된 비밀 파일(같은 RDS의 baseball_dev 스키마 접속정보). 권한 600.
+EnvironmentFile=/home/ubuntu/baseball-dev.env
+Environment=SPRING_PROFILES_ACTIVE=dev
+# t4g.small(2GB)에서 prod(baseball)와 동시에 뜨므로 힙을 훨씬 작게 잡는다.
+# 압박 신호(느려짐/OOM) 보이면 힙을 더 줄이거나 t4g.medium 전환을 검토한다.
+ExecStart=/usr/bin/java -Xms128m -Xmx384m -jar /home/ubuntu/baseball-dev.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
