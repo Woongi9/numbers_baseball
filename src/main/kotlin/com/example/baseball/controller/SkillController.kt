@@ -34,6 +34,9 @@ class SkillController(
 
     /** 카드(BasicCard/TextCard) 노출 여부. 이미지 URL이 설정된 환경(prod/local)에서만 카드를 쓴다. */
     private val cardsEnabled: Boolean get() = imageBaseUrl.isNotBlank()
+
+    /** 멘션 프리필이 심는 제로폭 문자군(U+200B/C/D, U+FEFF). 발화 판정 전에 제거한다. */
+    private val zeroWidthChars = Regex("[\\u200B\\u200C\\u200D\\uFEFF]")
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
      * 카카오 5초 타임아웃 안에 끝나야 하므로 무거운 작업은 두지 않는다.
@@ -46,7 +49,9 @@ class SkillController(
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val userId = request.userRequest.user.id
         val botKey = request.userRequest.chat?.properties?.botGroupKey
-        val utterance = request.userRequest.utterance.trim()
+        // 멘션 프리필 버튼이 심는 제로폭 공백(U+200B 등)을 제거한 뒤 판정한다.
+        // 이게 남으면 "​1234"가 숫자 판정(all isDigit)을 통과하지 못해 추측이 먹히지 않는다.
+        val utterance = request.userRequest.utterance.replace(zeroWidthChars, "").trim()
         return handle(userId, botKey, utterance)
     }
 
@@ -67,7 +72,7 @@ class SkillController(
                     title = "⚾ 새 게임 시작",
                     description = text,
                     buttons = listOf(
-                        SkillResponse.Button.message("게임 규칙", "게임 규칙"),
+                        SkillResponse.Button.mentionPrefill("제출"),
                         SkillResponse.Button.message("포기", "포기"),
                     ),
                     fallbackText = text,
@@ -98,7 +103,7 @@ class SkillController(
                 textCardOrText(
                     title = "⚾ 숫자야구 규칙",
                     description = body,
-                    buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
+                    buttons = listOf(SkillResponse.Button.message("시작", "시작")),
                     fallbackText = "[숫자야구 규칙]\n$body",
                 )
             }

@@ -39,7 +39,11 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
                 value("https://img.test/images/start.png")
             }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("message") }
+            // 시작 카드 버튼은 [제출(멘션 프리필), 포기] 이다.
+            jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("\u200B") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[1].label") { value("포기") }
         }
     }
 
@@ -89,14 +93,14 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(1) }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("message") }
-            // 빈 문자열이면 카카오가 라벨("제출")을 프리필로 대체하므로 공백 한 칸을 넣는다(배포 피드백).
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value(" ") }
+            // 빈 문자열/공백이면 카카오가 라벨("제출")을 프리필로 대체하므로 제로폭 공백(U+200B)을 넣는다(배포 피드백).
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("\u200B") }
         }
     }
 
     @Test
-    @DisplayName("게임 규칙 응답은 썸네일 없는 textCard + 멘션 프리필 '제출' 버튼이다")
-    fun rulesReturnsTextCardWithSubmit() {
+    @DisplayName("게임 규칙 응답은 썸네일 없는 textCard + '시작' 버튼이다")
+    fun rulesReturnsTextCardWithStart() {
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
             content = body("게임 규칙", "card-rules")
@@ -106,8 +110,8 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].textCard.title") { value("⚾ 숫자야구 규칙") }
             jsonPath("$.template.outputs[0].textCard.description") { value(org.hamcrest.Matchers.containsString("STRIKE")) }
             jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(1) }
-            jsonPath("$.template.outputs[0].textCard.buttons[0].label") { value("제출") }
-            jsonPath("$.template.outputs[0].textCard.buttons[0].messageText") { value(" ") }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].label") { value("시작") }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].messageText") { value("시작") }
         }
     }
 

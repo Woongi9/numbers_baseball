@@ -131,21 +131,27 @@ data class SkillResponse(
         val webLinkUrl: String? = null,
     ) {
         companion object {
+            /** 제로폭 공백(U+200B). 멘션 프리필에서 라벨 대체를 막는 '보이지 않는 non-blank' 값. */
+            const val ZERO_WIDTH_SPACE = "\u200B"
+
             /** '메시지' 버튼: 누르면 messageText를 사용자가 입력한 것처럼 재발화한다. */
             fun message(label: String, messageText: String): Button =
                 Button(label = label, action = "message", messageText = messageText)
 
             /**
              * 오픈채팅 멘션 프리필용 버튼.
-             * 오픈채팅에서 message 버튼은 즉시 전송이 아니라 입력창에 "@봇 "을 프리필한다.
-             * messageText로 멘션 뒤에 채울 값을 지정하며, 유저가 값을 이어서 입력한다(예: 다음 추측 입력).
+             * 오픈채팅에서 message 버튼은 입력창에 "@봇 " + messageText 를 프리필한다.
+             * 목표는 "@봇 "만 남기고(라벨/문구는 안 보이게) 유저가 곧바로 숫자를 이어 입력하게 하는 것.
              *
-             * 여기서 공백 한 칸(" ")을 쓰는 이유(배포 피드백): messageText를 빈 문자열("")로 두면
-             * 카카오가 이를 "값 없음"으로 보고 버튼 라벨(예: "제출")을 대신 프리필해 "@봇 제출"이 된다.
-             * 공백 한 칸이면 라벨이 새어나오지 않고 멘션 뒤에 공백만 붙어 유저가 곧바로 숫자를 입력할 수 있다.
+             * messageText 로 [제로폭 공백 U+200B]을 쓰는 이유(배포 피드백):
+             *  - ""(빈 문자열)이나 " "(공백)으로 두면 카카오가 "값 없음"으로 보고 버튼 라벨(예: "제출")을
+             *    대신 프리필해 "@봇 제출"이 되어버린다.
+             *  - U+200B 는 '보이지 않지만 빈 값은 아닌' 문자라 라벨 대체를 막으면서 화면상 "@봇 "만 보이게 한다.
+             * 주의: 이 문자가 이어지는 추측 입력에 섞여 들어오므로, SkillController 입력단에서 제거해야
+             *       "\u200B1234" 같은 값이 숫자 판정(all isDigit)을 통과한다.
              */
             fun mentionPrefill(label: String): Button =
-                Button(label = label, action = "message", messageText = " ")
+                Button(label = label, action = "message", messageText = ZERO_WIDTH_SPACE)
         }
     }
 

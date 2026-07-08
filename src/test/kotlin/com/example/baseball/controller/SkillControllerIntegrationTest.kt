@@ -73,6 +73,18 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
+    @DisplayName("추측: 멘션 프리필이 남긴 제로폭 공백이 앞에 붙어도 숫자로 판정한다")
+    fun guessStripsZeroWidthPrefix() {
+        val userId = "it-user-zwsp"
+        play("시작", userId, "새 게임")
+        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+
+        // 프리필 잔여물(U+200B)이 추측 앞에 섞여 들어온 상황을 재현: "\u200B<정답>"
+        play("\u200B${game.answer}", userId, "정답")
+        assertEquals(GameStatus.WON, gameRepository.findById(game.id!!).orElseThrow().status)
+    }
+
+    @Test
     @DisplayName("정답 승리: 오픈채팅(botKey 있음)에서는 승자를 멘션한다")
     fun winMentionsWinnerInOpenChat() {
         val userId = "it-user-winmention"
