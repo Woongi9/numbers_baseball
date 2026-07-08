@@ -73,6 +73,30 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
+    @DisplayName("정답 승리: 오픈채팅(botKey 있음)에서는 승자를 멘션한다")
+    fun winMentionsWinnerInOpenChat() {
+        val userId = "it-user-winmention"
+        val botKey = "it-bot-winmention"
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("시작", userId, botKey = botKey)
+        }.andExpect { status { isOk() } }
+        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body(game.answer, userId, botKey = botKey)
+        }.andExpect {
+            status { isOk() }
+            // 이미지 URL 미설정 → simpleText 폴백 경로. 승자 멘션 자리표시자 + extra.mentions.winner 를 담는다.
+            jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("{{#mentions.winner}}")) }
+            jsonPath("$.extra.mentions.winner.type") { value("botUserKey") }
+            jsonPath("$.extra.mentions.winner.id") { value(userId) } // botUserKey == userId
+        }
+    }
+
+    @Test
     @DisplayName("시작 → 오답이면 PLAYING 유지, 시도 횟수 증가")
     fun startWrongGuess() {
         val userId = "it-user-wrong"

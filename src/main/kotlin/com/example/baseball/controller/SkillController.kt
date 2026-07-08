@@ -90,7 +90,8 @@ class SkillController(
 
             SkillCommand.RANKING -> formatRanking(botKey)
 
-            SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
+            // botUserKey 는 userId 와 동일(GameService 참고) → 승리 시 승자 멘션 id 로 그대로 쓴다.
+            SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance), botKey, botUserKey = userId)
 
             SkillCommand.RULES -> {
                 val body = rulesBody()
@@ -111,12 +112,17 @@ class SkillController(
      * - 진행중: 아웃/스트라이크/볼 썸네일 + [제출](오픈채팅 멘션 프리필용)
      * 폴백 문구는 기존 simpleText와 동일하게 유지(하위 호환·테스트 안정).
      */
-    private fun formatGuess(outcome: GuessOutcome): SkillResponse {
+    private fun formatGuess(outcome: GuessOutcome, botKey: String?, botUserKey: String): SkillResponse {
         val r = outcome.result
         if (r.isWin) {
             val before = outcome.totalScore - outcome.gain   // 적립 전 누적 점수
             val headline = winHeadline(outcome.tries)
+            // 오픈채팅(botKey 있음)에서만 승자를 멘션한다. 1:1/일반챗은 멘션 미지원이라 자리표시자를 넣지 않는다.
+            val mentions = botKey?.let {
+                mapOf("winner" to SkillResponse.Mention(type = "botUserKey", id = botUserKey))
+            } ?: emptyMap()
             val body = buildString {
+                if (mentions.isNotEmpty()) appendLine("{{#mentions.winner}} 님, 정답을 맞혔어요!")
                 appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
                 // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
                 outcome.percentile?.let { appendLine(percentileLine(it)) }
@@ -131,6 +137,7 @@ class SkillController(
                     SkillResponse.Button.message("랭킹", "랭킹"),
                 ),
                 fallbackText = "$headline\n$body",
+                mentions = mentions,
             )
         }
         // 진행중: 아웃(0S0B) → 스트라이크(1개+) → 볼 순으로 썸네일을 고른다.
@@ -161,8 +168,10 @@ class SkillController(
         description: String,
         buttons: List<SkillResponse.Button>,
         fallbackText: String,
+        mentions: Map<String, SkillResponse.Mention> = emptyMap(),
     ): SkillResponse {
-        if (!cardsEnabled) return SkillResponse.text(fallbackText)
+        // 카드/폴백 어느 경로든 멘션(extra.mentions)은 동일하게 실어야 자리표시자가 실제 멘션으로 치환된다.
+        if (!cardsEnabled) return SkillResponse.textWithMentions(fallbackText, mentions)
         val card = SkillResponse.BasicCard(
             thumbnail = SkillResponse.Thumbnail(
                 imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}",
@@ -173,7 +182,8 @@ class SkillController(
             description = description.take(SkillResponse.BasicCard.DESC_MAX),
             buttons = buttons.ifEmpty { null },
         )
-        return SkillResponse.card(card)
+        val response = SkillResponse.card(card)
+        return if (mentions.isEmpty()) response else response.copy(extra = SkillResponse.Extra(mentions))
     }
 
     /**
@@ -233,7 +243,9 @@ class SkillController(
             ranking.forEach { e ->
                 val key = "user${e.rank}" // 텍스트 자리표시자 키와 mentions 맵 키가 대응해야 한다.
                 mentions[key] = SkillResponse.Mention(type = "botUserKey", id = e.botUserKey)
-                appendLine("${e.rank}위  {{#mentions.$key}}  ${e.score}점")
+                // 상위 30/20/10% 구간이면 RankTitle 이모지로 강조(구간 밖·표본 부족이면 빈 문자열).
+                val badge = e.title?.let { "${it.emoji} " } ?: ""
+                appendLine("${e.rank}위  $badge{{#mentions.$key}}  ${e.score}점")
             }
         }.trimEnd()
         return SkillResponse.textWithMentions(text, mentions)

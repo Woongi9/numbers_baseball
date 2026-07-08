@@ -25,8 +25,9 @@ class RankingServiceTest {
             score = score,
         )
 
-    private fun givenRanking(vararg rows: BotUser) {
+    private fun givenRanking(vararg rows: BotUser, total: Int = rows.size) {
         every { botUserRepository.findTop10ByBotKeyOrderByScoreDesc(botKey) } returns rows.toList()
+        every { botUserRepository.countByBotKey(botKey) } returns total.toLong()
     }
 
     @Test
@@ -55,5 +56,33 @@ class RankingServiceTest {
     fun emptyRanking() {
         givenRanking()
         assertEquals(emptyList(), sut.getBotRanking(botKey))
+    }
+
+    @Test
+    @DisplayName("표본이 충분하면 상위 10/20/30% 구간에 RankTitle 뱃지를 부여한다")
+    fun assignsRankTitleBadge() {
+        // 전체 10명(모두 서로 다른 점수). topPercent = ceil(rank*100/10).
+        // rank1=10%→TOP_10, rank2=20%→TOP_20, rank3=30%→TOP_30, rank4=40%→null
+        givenRanking(
+            botUser("u1", 100), botUser("u2", 90), botUser("u3", 80), botUser("u4", 70),
+            botUser("u5", 60), botUser("u6", 50), botUser("u7", 40), botUser("u8", 30),
+            botUser("u9", 20), botUser("u10", 10),
+            total = 10,
+        )
+
+        val ranking = sut.getBotRanking(botKey)
+
+        assertEquals(RankTitle.TOP_10, ranking[0].title)
+        assertEquals(RankTitle.TOP_20, ranking[1].title)
+        assertEquals(RankTitle.TOP_30, ranking[2].title)
+        assertEquals(null, ranking[3].title)
+    }
+
+    @Test
+    @DisplayName("표본이 MIN_SAMPLE 미만이면 뱃지를 부여하지 않는다(title=null)")
+    fun noBadgeBelowMinSample() {
+        givenRanking(botUser("u1", 300), botUser("u2", 200), total = 2)
+
+        assertEquals(null, sut.getBotRanking(botKey).first().title)
     }
 }
