@@ -60,6 +60,34 @@ class SkillResponseTest {
             assertFalse(json.has("blockId"))
             assertFalse(json.has("webLinkUrl"))
         }
+
+        @Test
+        @DisplayName("멘션 없는 text 응답은 extra 키를 포함하지 않는다(NON_NULL)")
+        fun textOmitsExtra() {
+            val json = mapper.readTree(mapper.writeValueAsString(SkillResponse.text("안녕")))
+            assertFalse(json.has("extra"))
+        }
+
+        @Test
+        @DisplayName("textWithMentions는 simpleText + extra.mentions(type/id)를 담는다")
+        fun textWithMentionsShape() {
+            val response = SkillResponse.textWithMentions(
+                "1위 {{#mentions.user1}}",
+                mapOf("user1" to SkillResponse.Mention(type = "botUserKey", id = "abc123")),
+            )
+            val json = mapper.readTree(mapper.writeValueAsString(response))
+
+            assertEquals("1위 {{#mentions.user1}}", json["template"]["outputs"][0]["simpleText"]["text"].asText())
+            assertEquals("botUserKey", json["extra"]["mentions"]["user1"]["type"].asText())
+            assertEquals("abc123", json["extra"]["mentions"]["user1"]["id"].asText())
+        }
+
+        @Test
+        @DisplayName("빈 멘션 맵이면 extra를 생략한다")
+        fun emptyMentionsOmitsExtra() {
+            val json = mapper.readTree(mapper.writeValueAsString(SkillResponse.textWithMentions("안녕", emptyMap())))
+            assertFalse(json.has("extra"))
+        }
     }
 
     @Nested

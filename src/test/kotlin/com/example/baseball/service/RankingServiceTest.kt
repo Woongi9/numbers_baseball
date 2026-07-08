@@ -41,21 +41,13 @@ class RankingServiceTest {
     }
 
     @Test
-    @DisplayName("긴 사용자 키는 앞 4글자 + … 로 마스킹한다")
-    fun masksLongKey() {
+    @DisplayName("botUserKey 를 멘션 id 용으로 원본 그대로 노출한다")
+    fun exposesRawBotUserKey() {
         givenRanking(botUser("abcdef123", 100))
 
         val entry = sut.getBotRanking(botKey).first()
 
-        assertEquals("abcdef123", entry.label)
-    }
-
-    @Test
-    @DisplayName("4글자 이하 키는 그대로 노출한다")
-    fun keepsShortKey() {
-        givenRanking(botUser("u1", 100))
-
-        assertEquals("u1", sut.getBotRanking(botKey).first().label)
+        assertEquals("abcdef123", entry.botUserKey)
     }
 
     @Test

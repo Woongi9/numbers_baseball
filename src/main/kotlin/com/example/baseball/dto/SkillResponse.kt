@@ -18,9 +18,26 @@ import com.fasterxml.jackson.annotation.JsonInclude
 data class SkillResponse(
     val version: String,
     val template: Template,
+    // 오픈채팅 멘션(@닉네임)용. simpleText 안의 "{{#mentions.userN}}" 자리표시자를 카카오가
+    // 여기 등록된 botUserKey의 실제 닉네임 멘션으로 치환한다. 멘션이 없으면 직렬화에서 제외(NON_NULL).
+    val extra: Extra? = null,
 ) {
     data class Template(
         val outputs: List<Output>,
+    )
+
+    /** 응답 부가 정보. 지금은 멘션만 담는다. */
+    data class Extra(
+        val mentions: Map<String, Mention>,
+    )
+
+    /**
+     * 멘션 대상 한 명. text의 "{{#mentions.<키>}}"가 이 멘션으로 치환된다.
+     * type="botUserKey" 이면 id 는 해당 채팅방의 botUserKey(=오픈채팅 사용자 키)다.
+     */
+    data class Mention(
+        val type: String,
+        val id: String,
     )
 
     /** outputs 원소. simpleText / basicCard / textCard 중 하나만 채운다. */
@@ -121,11 +138,14 @@ data class SkillResponse(
             /**
              * 오픈채팅 멘션 프리필용 버튼.
              * 오픈채팅에서 message 버튼은 즉시 전송이 아니라 입력창에 "@봇 "을 프리필한다.
-             * messageText를 빈 문자열로 두어 멘션만 채워지게 하고, 유저가 값을 이어서 입력한다.
-             * (예: 숫자야구의 다음 추측 입력)
+             * messageText로 멘션 뒤에 채울 값을 지정하며, 유저가 값을 이어서 입력한다(예: 다음 추측 입력).
+             *
+             * 여기서 공백 한 칸(" ")을 쓰는 이유(배포 피드백): messageText를 빈 문자열("")로 두면
+             * 카카오가 이를 "값 없음"으로 보고 버튼 라벨(예: "제출")을 대신 프리필해 "@봇 제출"이 된다.
+             * 공백 한 칸이면 라벨이 새어나오지 않고 멘션 뒤에 공백만 붙어 유저가 곧바로 숫자를 입력할 수 있다.
              */
             fun mentionPrefill(label: String): Button =
-                Button(label = label, action = "message", messageText = "")
+                Button(label = label, action = "message", messageText = " ")
         }
     }
 
@@ -135,6 +155,18 @@ data class SkillResponse(
             SkillResponse(
                 version = "2.0",
                 template = Template(listOf(Output(simpleText = SimpleText(message)))),
+            )
+
+        /**
+         * 멘션이 포함된 텍스트 응답 팩토리.
+         * message 안의 "{{#mentions.<키>}}" 자리표시자와 mentions 맵의 키가 대응해야 한다.
+         * mentions 가 비면 일반 text 응답과 동일(extra 생략)하다.
+         */
+        fun textWithMentions(message: String, mentions: Map<String, Mention>): SkillResponse =
+            SkillResponse(
+                version = "2.0",
+                template = Template(listOf(Output(simpleText = SimpleText(message)))),
+                extra = if (mentions.isEmpty()) null else Extra(mentions),
             )
 
         /** BasicCard 응답 한 개를 만드는 팩토리. */

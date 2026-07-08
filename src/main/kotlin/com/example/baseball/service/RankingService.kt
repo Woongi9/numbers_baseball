@@ -4,10 +4,13 @@ import com.example.baseball.domain.user.BotUserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/** 랭킹 한 줄(순위·표시 라벨·점수). 컨트롤러가 이 목록으로 텍스트를 만든다. */
+/**
+ * 랭킹 한 줄(순위·사용자 키·점수). 컨트롤러가 이 목록으로 텍스트를 만든다.
+ * botUserKey 는 오픈채팅 멘션(extra.mentions)의 id 로 쓰여, 카카오가 실제 닉네임(@사용자)으로 치환한다.
+ */
 data class RankEntry(
     val rank: Int,
-    val label: String,
+    val botUserKey: String,
     val score: Int,
 )
 
@@ -29,8 +32,8 @@ class RankingService(
             .mapIndexed { index, botUser ->
                 RankEntry(
                     rank = index + 1,
-                    // 닉네임 컬럼 도입(STEP 9/A) 전까지 카카오 키를 그대로 라벨로 쓴다.
-                    label = botUser.botUserKey,
+                    // 오픈채팅 멘션 id 로 넘길 원본 키. 카카오가 이 키의 실제 닉네임으로 치환한다(STEP 12 배포 피드백).
+                    botUserKey = botUser.botUserKey,
                     score = botUser.score,
                 )
             }

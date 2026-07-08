@@ -515,9 +515,9 @@ SELECT COUNT(*) FROM users;
 - [X] prod 재배포 후 `curl -I -A "" https://numbers-baseball.com/images/answer.png` → 200 + image/* (Cloudflare Bot Fight Mode 예외 / SSL `Full` / 프록시 상태 점검)
 - [ ] 오픈빌더 실제 카드 노출(썸네일+버튼) 확인
 - [ ] **오픈채팅에서 `제출` 버튼 → 입력창 `@봇 ` 프리필 실동작 확인** (빈 messageText가 라벨 없이 멘션만 프리필되는지; 안 되면 messageText를 공백 등으로 조정)
-- [ ] **(배포 피드백) `게임 규칙` 응답에 `제출` 버튼 추가** — 현재 `rulesMessage()`는 simpleText만 반환해 버튼이 없음. 규칙 확인 후 바로 이어서 입력할 수 있도록 진행중 카드와 동일한 `[제출]` 버튼을 붙인다.
-- [ ] **(배포 피드백) `제출` 버튼 클릭 시 `@봇 제출`로 프리필되는 문제 수정** — 의도(빈 `messageText`로 멘션만 프리필)와 달리 실제로는 라벨(`제출`)까지 함께 입력창에 채워지는 것으로 확인됨. `SkillResponse.Button.mentionPrefill` 동작을 재점검해 라벨 없이 멘션만 프리필되도록 수정.
-- [ ] **(배포 피드백) `랭킹` 조회 시 `userId` → 닉네임 변환** — 현재 `formatRankLine`은 `botUserKey` 마스킹 값을 그대로 노출(STEP 10 메모: "닉네임 컬럼 부재 → botUserKey 마스킹으로 대체"). 닉네임 데이터를 도입해 랭킹 표시를 사용자가 알아볼 수 있는 이름으로 교체.
+- [X] **(배포 피드백) `게임 규칙` 응답에 `제출` 버튼 추가** — RULES 분기를 simpleText → `textCardOrText`(썸네일 없는 TextCard)로 전환해 진행중 카드와 동일한 `[제출]` 버튼을 붙였다(`SkillController.handle`). 헤더는 카드 title(`⚾ 숫자야구 규칙`)로 분리하고, 본문은 `rulesBody()`로 추출(카드 비활성 환경은 `[숫자야구 규칙]\n본문` simpleText 폴백 유지). 테스트: `SkillControllerCardTest.rulesReturnsTextCardWithSubmit`.
+- [X] **(배포 피드백) `제출` 버튼 클릭 시 `@봇 제출`로 프리필되는 문제 수정** — 원인은 `messageText=""`(빈 문자열)일 때 카카오가 값 없음으로 보고 라벨(`제출`)을 대신 프리필한 것. `SkillResponse.Button.mentionPrefill`의 `messageText`를 공백 한 칸(`" "`)으로 바꿔 라벨이 새지 않고 멘션만 프리필되게 했다(PLAN 517 메모의 "공백으로 조정" 방향). ⚠️ **실기기 최종 확인 필요**: 오픈채팅에서 `@봇 ` 뒤에 공백만 붙는지(라벨 미노출) 카카오 앱으로 검증할 것.
+- [X] **(배포 피드백) `랭킹` 조회 시 `userId` → 닉네임 변환** — 별도 닉네임 컬럼을 두는 대신 **카카오 오픈채팅 멘션** 기능을 사용. 각 줄의 이름을 `{{#mentions.userN}}` 자리표시자로 두고, 응답 최상위 `extra.mentions.userN = {type:"botUserKey", id:<botUserKey>}`에 등록하면 카카오가 실제 닉네임(@사용자)으로 치환한다. 변경: `SkillResponse`에 `extra`/`Extra`/`Mention` + `textWithMentions()` 팩토리 추가, `RankEntry.label`→`botUserKey`(멘션 id 원본 키) 리네임, `SkillController.formatRanking`이 `String`→`SkillResponse` 반환. 테스트: `SkillControllerIntegrationTest.rankingUsesMentions`, `SkillResponseTest`(extra 직렬화 3건). ⚠️ **실기기 확인 필요**: 멘션은 오픈채팅에서만 닉네임으로 렌더됨 — 1:1/일반챗에선 치환 동작을 카카오 앱으로 검증할 것.
 
 > **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons. ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증, ③1:1 이미지는 `fixedRatio=true`(버튼 가로 최대 2), ④오픈채팅에선 `message` 버튼이 `@봇 ` 프리필. 코드 완료 → 배포 검증만 남음.
 

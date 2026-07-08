@@ -140,6 +140,28 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
+    @DisplayName("랭킹: 이름을 멘션 자리표시자로 두고 extra.mentions에 botUserKey를 등록한다")
+    fun rankingUsesMentions() {
+        val botKey = "it-bot-mention"
+        seedBotUser(botKey, "userkey-high", 300)
+        seedBotUser(botKey, "userkey-low", 100)
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("랭킹", "any-user", botKey = botKey)
+        }.andExpect {
+            status { isOk() }
+            // 1위 줄은 원시 키가 아니라 멘션 자리표시자를 담는다.
+            jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("1위  {{#mentions.user1}}  300점")) }
+            jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("2위  {{#mentions.user2}}  100점")) }
+            // extra.mentions 에 순위별 botUserKey 가 등록된다.
+            jsonPath("$.extra.mentions.user1.type") { value("botUserKey") }
+            jsonPath("$.extra.mentions.user1.id") { value("userkey-high") }
+            jsonPath("$.extra.mentions.user2.id") { value("userkey-low") }
+        }
+    }
+
+    @Test
     @DisplayName("랭킹: 해당 봇에 점수가 없으면 안내 메시지")
     fun rankingEmpty() {
         play("랭킹", "any-user", "아직 랭킹에 등록된 점수가 없습니다", botKey = "it-bot-empty")

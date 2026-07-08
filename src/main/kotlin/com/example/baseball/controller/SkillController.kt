@@ -5,7 +5,6 @@ import com.example.baseball.dto.SkillResponse
 import com.example.baseball.service.GameService
 import com.example.baseball.service.GuessOutcome
 import com.example.baseball.service.Percentile
-import com.example.baseball.service.RankEntry
 import com.example.baseball.service.RankTitle
 import com.example.baseball.service.RankingService
 import io.swagger.v3.oas.annotations.Operation
@@ -89,11 +88,19 @@ class SkillController(
                 )
             }
 
-            SkillCommand.RANKING -> SkillResponse.text(formatRanking(botKey))
+            SkillCommand.RANKING -> formatRanking(botKey)
 
             SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
 
-            SkillCommand.RULES -> SkillResponse.text(rulesMessage())
+            SkillCommand.RULES -> {
+                val body = rulesBody()
+                textCardOrText(
+                    title = "⚾ 숫자야구 규칙",
+                    description = body,
+                    buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
+                    fallbackText = "[숫자야구 규칙]\n$body",
+                )
+            }
 
             SkillCommand.HELP -> SkillResponse.text(helpMessage())
         }
@@ -207,22 +214,30 @@ class SkillController(
         return "${badge}이번 시즌 상위 ${p.topPercent}% (${p.rank}위 / ${p.total}명)"
     }
 
-    /** 봇(채팅방) 랭킹 TOP 10 텍스트. botKey 없음·빈 랭킹은 안내 메시지로 변환. */
-    private fun formatRanking(botKey: String?): String {
-        if (botKey == null) return "채팅방 정보를 확인할 수 없어 랭킹을 보여줄 수 없습니다."
+    /**
+     * 봇(채팅방) 랭킹 TOP 10. botKey 없음·빈 랭킹은 안내 메시지로 변환.
+     * 각 줄의 사용자 이름은 "{{#mentions.userN}}" 자리표시자로 두고, extra.mentions 에 botUserKey 를 등록해
+     * 카카오가 실제 닉네임(@사용자) 멘션으로 치환하게 한다(STEP 12 배포 피드백 — 원시 키 노출 제거).
+     */
+    private fun formatRanking(botKey: String?): SkillResponse {
+        if (botKey == null) return SkillResponse.text("채팅방 정보를 확인할 수 없어 랭킹을 보여줄 수 없습니다.")
 
         val ranking = rankingService.getBotRanking(botKey)
         if (ranking.isEmpty()) {
-            return "아직 랭킹에 등록된 점수가 없습니다. 게임에서 정답을 맞히면 점수가 쌓여요."
+            return SkillResponse.text("아직 랭킹에 등록된 점수가 없습니다. 게임에서 정답을 맞히면 점수가 쌓여요.")
         }
-        return buildString {
-            appendLine("🏆 이 채팅방 랭킹 TOP ${ranking.size}")
-            ranking.forEach { append(formatRankLine(it)) }
-        }.trimEnd()
-    }
 
-    private fun formatRankLine(e: RankEntry): String =
-        "${e.rank}위  ${e.label}  ${e.score}점\n"
+        val mentions = LinkedHashMap<String, SkillResponse.Mention>()
+        val text = buildString {
+            appendLine("🏆 이 채팅방 랭킹 TOP ${ranking.size}")
+            ranking.forEach { e ->
+                val key = "user${e.rank}" // 텍스트 자리표시자 키와 mentions 맵 키가 대응해야 한다.
+                mentions[key] = SkillResponse.Mention(type = "botUserKey", id = e.botUserKey)
+                appendLine("${e.rank}위  {{#mentions.$key}}  ${e.score}점")
+            }
+        }.trimEnd()
+        return SkillResponse.textWithMentions(text, mentions)
+    }
 
     /** 사용법: 명령어 안내. 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다. */
     private fun helpMessage(): String =
@@ -236,21 +251,22 @@ class SkillController(
         """.trimIndent()
 
     /**
-     * 게임 규칙: 승패 판정(STRIKE/BALL/OUT) 설명. 자릿수는 GameService.DIGITS로 단일화.
+     * 게임 규칙 본문: 승패 판정(STRIKE/BALL/OUT) 설명. 자릿수는 GameService.DIGITS로 단일화.
      * BaseballJudge 판정과 문구를 일치시킨다: STRIKE=자리+숫자, BALL=숫자만(자리 다름), OUT=0S 0B.
      * 예시 숫자는 이해를 돕기 위한 고정 값(DIGITS=4 기준)이다.
+     * 헤더("[숫자야구 규칙]")는 카드에선 title로 분리되므로 본문에는 넣지 않는다(simpleText 폴백에서만 앞에 붙인다).
      */
-    private fun rulesMessage(): String {
+    private fun rulesBody(): String {
         val n = GameService.DIGITS
         return """
-            [숫자야구 규칙]
             서로 다른 ${n}자리 숫자(중복 없이)를 맞히는 게임입니다.
-            - STRIKE(스트라이크) : 숫자와 자리 모두 일치
-            - BALL(볼) : 숫자는 있지만 자리가 다름
-            - OUT(아웃) : 맞는 숫자가 하나도 없음 (0S 0B)
+            - STRIKE : 숫자와 자리 모두 일치
+            - BALL : 숫자는 있지만 자리가 다름
+            - OUT : 맞는 숫자가 하나도 없음 (0S 0B)
 
             예) 정답 1234 / 추측 1325 → 1S 2B
-            ${n}S가 되면 승리! '시작'으로 도전하세요.
+            ${n}S가 되면 승리!
+            '시작'으로 도전하세요.
         """.trimIndent()
     }
 }
