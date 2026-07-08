@@ -515,6 +515,9 @@ SELECT COUNT(*) FROM users;
 - [X] prod 재배포 후 `curl -I -A "" https://numbers-baseball.com/images/answer.png` → 200 + image/* (Cloudflare Bot Fight Mode 예외 / SSL `Full` / 프록시 상태 점검)
 - [ ] 오픈빌더 실제 카드 노출(썸네일+버튼) 확인
 - [ ] **오픈채팅에서 `제출` 버튼 → 입력창 `@봇 ` 프리필 실동작 확인** (빈 messageText가 라벨 없이 멘션만 프리필되는지; 안 되면 messageText를 공백 등으로 조정)
+- [ ] **(배포 피드백) `게임 규칙` 응답에 `제출` 버튼 추가** — 현재 `rulesMessage()`는 simpleText만 반환해 버튼이 없음. 규칙 확인 후 바로 이어서 입력할 수 있도록 진행중 카드와 동일한 `[제출]` 버튼을 붙인다.
+- [ ] **(배포 피드백) `제출` 버튼 클릭 시 `@봇 제출`로 프리필되는 문제 수정** — 의도(빈 `messageText`로 멘션만 프리필)와 달리 실제로는 라벨(`제출`)까지 함께 입력창에 채워지는 것으로 확인됨. `SkillResponse.Button.mentionPrefill` 동작을 재점검해 라벨 없이 멘션만 프리필되도록 수정.
+- [ ] **(배포 피드백) `랭킹` 조회 시 `userId` → 닉네임 변환** — 현재 `formatRankLine`은 `botUserKey` 마스킹 값을 그대로 노출(STEP 10 메모: "닉네임 컬럼 부재 → botUserKey 마스킹으로 대체"). 닉네임 데이터를 도입해 랭킹 표시를 사용자가 알아볼 수 있는 이름으로 교체.
 
 > **한 줄 요약**: BasicCard = 썸네일(필수)+title/description+buttons. ①썸네일 필수라 폴백 필요, ②data class로 타입화·버튼수 검증, ③1:1 이미지는 `fixedRatio=true`(버튼 가로 최대 2), ④오픈채팅에선 `message` 버튼이 `@봇 ` 프리필. 코드 완료 → 배포 검증만 남음.
 
