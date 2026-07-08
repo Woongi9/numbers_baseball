@@ -113,7 +113,7 @@ class SkillController(
 
     /**
      * 추측 결과를 카드/텍스트로 변환한다.
-     * - 승리: answer 썸네일 + [새 게임 시작, 랭킹]
+     * - 승리: answer 썸네일 + [시작, 랭킹]
      * - 진행중: 아웃/스트라이크/볼 썸네일 + [제출](오픈채팅 멘션 프리필용)
      * 폴백 문구는 기존 simpleText와 동일하게 유지(하위 호환·테스트 안정).
      */
@@ -140,7 +140,7 @@ class SkillController(
                 title = headline,
                 description = body,
                 buttons = listOf(
-                    SkillResponse.Button.message("새 게임 시작", "시작"),
+                    SkillResponse.Button.message("시작", "시작"),
                     SkillResponse.Button.message("랭킹", "랭킹"),
                 ),
                 fallbackText = "$headline\n$body",
