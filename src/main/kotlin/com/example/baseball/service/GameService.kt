@@ -21,6 +21,8 @@ data class GuessOutcome(
     val totalScore: Int = 0,
     /** 적립 후 전역 상위 백분위(오답이거나 표본 부족이면 null). */
     val percentile: Percentile? = null,
+    /** 맞힌 정답(승리 시에만 채워짐, 오답이면 null). 승리 응답에 정답을 노출하는 데 쓴다. */
+    val answer: String? = null,
 )
 
 @Service
@@ -84,6 +86,7 @@ class GameService(
         return GuessOutcome(
             result = result, tries = game.tries, finished = true,
             gain = gain, totalScore = totalScore, percentile = percentile,
+            answer = game.answer,
         )
     }
 
