@@ -42,13 +42,13 @@ class RankingServiceTest {
     }
 
     @Test
-    @DisplayName("멘션 id 용으로 유저의 appUserId 를 노출한다")
-    fun exposesAppUserId() {
-        givenRanking(botUser("abcdef123", 100)) // botUser 헬퍼가 appUserId = "app-<key>" 로 생성
+    @DisplayName("botUserKey 를 멘션 id 용으로 원본 그대로 노출한다")
+    fun exposesRawBotUserKey() {
+        givenRanking(botUser("abcdef123", 100))
 
         val entry = sut.getBotRanking(botKey).first()
 
-        assertEquals("app-abcdef123", entry.appUserId)
+        assertEquals("abcdef123", entry.botUserKey)
     }
 
     @Test

@@ -176,7 +176,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("랭킹: 이름을 멘션 자리표시자로 두고 extra.mentions에 appUserId를 등록한다")
+    @DisplayName("랭킹: 이름을 멘션 자리표시자로 두고 extra.mentions에 botUserKey를 등록한다")
     fun rankingUsesMentions() {
         val botKey = "it-bot-mention"
         seedBotUser(botKey, "userkey-high", 300)
@@ -190,10 +190,10 @@ class SkillControllerIntegrationTest @Autowired constructor(
             // 1위 줄은 원시 키가 아니라 멘션 자리표시자를 담는다.
             jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("1위  {{#mentions.user1}}  300점")) }
             jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("2위  {{#mentions.user2}}  100점")) }
-            // extra.mentions 에 순위별 appUserId 가 등록된다(seedBotUser 가 appUserId = "app-<key>" 로 생성).
-            jsonPath("$.extra.mentions.user1.type") { value("appUserId") }
-            jsonPath("$.extra.mentions.user1.id") { value("app-userkey-high") }
-            jsonPath("$.extra.mentions.user2.id") { value("app-userkey-low") }
+            // extra.mentions 에 순위별 botUserKey 가 등록된다.
+            jsonPath("$.extra.mentions.user1.type") { value("botUserKey") }
+            jsonPath("$.extra.mentions.user1.id") { value("userkey-high") }
+            jsonPath("$.extra.mentions.user2.id") { value("userkey-low") }
         }
     }
 

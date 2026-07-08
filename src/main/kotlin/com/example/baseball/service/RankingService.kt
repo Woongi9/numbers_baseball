@@ -5,14 +5,14 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 랭킹 한 줄(순위·사용자 식별자·점수·강조 뱃지). 컨트롤러가 이 목록으로 텍스트를 만든다.
- * appUserId 는 오픈채팅 멘션(extra.mentions, type=appUserId)의 id 로 쓰여, 카카오가 실제 닉네임(@사용자)으로 치환한다.
+ * 랭킹 한 줄(순위·사용자 키·점수·강조 뱃지). 컨트롤러가 이 목록으로 텍스트를 만든다.
+ * botUserKey 는 오픈채팅 멘션(extra.mentions, type=botUserKey)의 id 로 쓰여, 카카오가 실제 닉네임(@사용자)으로 치환한다.
  *
  * @property title 상위 백분위(30/20/10%) 구간 강조 뱃지. 구간 밖이거나 표본 부족이면 null.
  */
 data class RankEntry(
     val rank: Int,
-    val appUserId: String,
+    val botUserKey: String,
     val score: Int,
     val title: RankTitle? = null,
 )
@@ -43,8 +43,8 @@ class RankingService(
                 ?.let { RankTitle.of(it.topPercent) }
             RankEntry(
                 rank = index + 1,
-                // 오픈채팅 멘션 id 로 넘길 appUserId(카카오 앱 전역 사용자 식별자). LAZY user 접근이라 TOP 10 기준 N+1(≤10).
-                appUserId = botUser.user.appUserId,
+                // 오픈채팅 멘션 id 로 넘길 원본 키. 카카오가 이 키의 실제 닉네임으로 치환한다(STEP 12 배포 피드백).
+                botUserKey = botUser.botUserKey,
                 score = botUser.score,
                 title = title,
             )

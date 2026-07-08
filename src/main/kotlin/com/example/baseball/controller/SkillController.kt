@@ -239,7 +239,7 @@ class SkillController(
             appendLine("🏆 이 채팅방 랭킹 TOP ${ranking.size}")
             ranking.forEach { e ->
                 val key = "user${e.rank}" // 텍스트 자리표시자 키와 mentions 맵 키가 대응해야 한다.
-                mentions[key] = SkillResponse.Mention(type = "appUserId", id = e.appUserId)
+                mentions[key] = SkillResponse.Mention(type = "botUserKey", id = e.botUserKey)
                 // 상위 30/20/10% 구간이면 RankTitle 이모지로 강조(구간 밖·표본 부족이면 빈 문자열).
                 val badge = e.title?.let { "${it.emoji} " } ?: ""
                 appendLine("${e.rank}위  $badge{{#mentions.$key}}  ${e.score}점")
