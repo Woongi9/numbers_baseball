@@ -126,13 +126,12 @@ class SkillController(
             val mentions = botKey?.let {
                 mapOf("winner" to SkillResponse.Mention(type = "botUserKey", id = botUserKey))
             } ?: emptyMap()
-            // 첫 줄: 정답을 맞혔다는 문구 + 실제 정답. 오픈채팅이면 승자 멘션을 앞에 붙인다.
-            val winnerPrefix = if (mentions.isNotEmpty()) "{{#mentions.winner}} 님, " else ""
             val body = buildString {
-                appendLine("${winnerPrefix}정답 ${outcome.answer}, 맞혔어요! 🎉")
+                appendLine("정답 ${outcome.answer}, 맞혔어요! 🎉")
                 appendLine("+${outcome.gain}점 ($before → ${outcome.totalScore})")
                 // 표본이 충분할 때만(percentile != null) 상위% 줄을 노출한다(적으면 무의미해 생략).
                 outcome.percentile?.let { appendLine(percentileLine(it)) }
+                appendLine()
                 append("'시작'으로 다시 도전하세요!")
             }
             return cardOrText(
@@ -228,7 +227,7 @@ class SkillController(
      */
     private fun percentileLine(p: Percentile): String {
         val badge = RankTitle.of(p.topPercent)?.let { "${it.emoji} ${it.label} · " } ?: "🏅 "
-        return "${badge}이번 시즌 상위 ${p.topPercent}% (${p.rank}위 / ${p.total}명)"
+        return "${badge}\n이번 시즌 상위 ${p.topPercent}% (${p.rank}위 / ${p.total}명)"
     }
 
     /**
