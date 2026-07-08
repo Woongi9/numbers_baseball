@@ -73,12 +73,12 @@ class SkillResponseTest {
         fun textWithMentionsShape() {
             val response = SkillResponse.textWithMentions(
                 "1위 {{#mentions.user1}}",
-                mapOf("user1" to SkillResponse.Mention(type = "botUserKey", id = "abc123")),
+                mapOf("user1" to SkillResponse.Mention(type = "appUserId", id = "abc123")),
             )
             val json = mapper.readTree(mapper.writeValueAsString(response))
 
             assertEquals("1위 {{#mentions.user1}}", json["template"]["outputs"][0]["simpleText"]["text"].asText())
-            assertEquals("botUserKey", json["extra"]["mentions"]["user1"]["type"].asText())
+            assertEquals("appUserId", json["extra"]["mentions"]["user1"]["type"].asText())
             assertEquals("abc123", json["extra"]["mentions"]["user1"]["id"].asText())
         }
 
