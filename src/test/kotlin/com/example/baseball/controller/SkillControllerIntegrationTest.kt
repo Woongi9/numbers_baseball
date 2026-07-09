@@ -45,11 +45,11 @@ class SkillControllerIntegrationTest @Autowired constructor(
         }
     }
 
-    /** 랭킹용 시드: User(FK) 저장 후 BotUser(botKey, botUserKey, score) 저장 */
+    /** 랭킹용 시드: User(FK, score=score) 저장 후 BotUser(botKey, botUserKey) 저장 */
     private fun seedBotUser(botKey: String, botUserKey: String, score: Int) {
-        val user = userRepository.save(User(appUserId = "app-$botUserKey"))
+        val user = userRepository.save(User(appUserId = "app-$botUserKey").apply { this.score = score })
         botUserRepository.save(
-            BotUser(user = user, botUserKey = botUserKey, botKey = botKey, score = score)
+            BotUser(user = user, botUserKey = botUserKey, botKey = botKey)
         )
     }
 

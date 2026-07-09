@@ -19,14 +19,13 @@ class RankingServiceTest {
 
     private fun botUser(botUserKey: String, score: Int): BotUser =
         BotUser(
-            user = User(appUserId = "app-$botUserKey"),
+            user = User(appUserId = "app-$botUserKey").apply { this.score = score },
             botUserKey = botUserKey,
             botKey = botKey,
-            score = score,
         )
 
     private fun givenRanking(vararg rows: BotUser, total: Int = rows.size) {
-        every { botUserRepository.findTop10ByBotKeyOrderByScoreDesc(botKey) } returns rows.toList()
+        every { botUserRepository.findTop10ByBotKeyOrderByUser_ScoreDesc(botKey) } returns rows.toList()
         every { botUserRepository.countByBotKey(botKey) } returns total.toLong()
     }
 

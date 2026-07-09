@@ -26,8 +26,8 @@ class RankingService(
     private val botUserRepository: BotUserRepository,
 ) {
     /**
-     * 현재 채팅방(botKey) 내 점수 TOP 10.
-     * 정렬·LIMIT 은 리포지토리 파생 쿼리가 담당 → 5초 제한 대비 경량 조회.
+     * 현재 채팅방(botKey) 내 TOP 10. 점수는 채팅방별 점수(botUser.score)가 아닌
+     * 전역 점수(user.score) 기준으로 선정·정렬·표시한다.
      *
      * 상위 백분위 뱃지(RankTitle): 모집단은 채팅방 전체 인원(countByBotKey)이다.
      * TOP 10 안의 엔트리는 "자기보다 점수가 엄격히 높은 사람"이 반드시 TOP 10 안에 함께 있으므로,
@@ -35,17 +35,17 @@ class RankingService(
      */
     @Transactional(readOnly = true)
     fun getBotRanking(botKey: String): List<RankEntry> {
-        val top = botUserRepository.findTop10ByBotKeyOrderByScoreDesc(botKey)
+        val top = botUserRepository.findTop10ByBotKeyOrderByUser_ScoreDesc(botKey)
         val total = botUserRepository.countByBotKey(botKey).toInt()
         return top.mapIndexed { index, botUser ->
-            val higher = top.count { it.score > botUser.score } // 동점은 공동순위(strictly-greater 만 higher)
+            val score = botUser.user.score
+            val higher = top.count { it.user.score > score } // 동점은 공동순위(strictly-greater 만 higher)
             val title = PercentileCalculator.of(higher = higher, total = total)
                 ?.let { RankTitle.of(it.topPercent) }
             RankEntry(
                 rank = index + 1,
-                // 오픈채팅 멘션 id 로 넘길 원본 키. 카카오가 이 키의 실제 닉네임으로 치환한다(STEP 12 배포 피드백).
                 botUserKey = botUser.botUserKey,
-                score = botUser.score,
+                score = score,
                 title = title,
             )
         }

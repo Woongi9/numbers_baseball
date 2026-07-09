@@ -59,7 +59,14 @@ Judging and scoring logic is deliberately kept free of Spring/JPA/Kakao so it's 
 
 ### Response shape: BasicCard with simpleText fallback
 
-`SkillController` builds Kakao BasicCard/TextCard responses (thumbnail + title/description + buttons) when `kakao.image-base-url` is configured (`prod`/`local`), and falls back to plain `simpleText` when it's blank (test profile / no images configured) — because a BasicCard's `thumbnail` field is **required** by Kakao's spec, so the fallback exists to keep responses valid when there's no image to show. `SkillResponse.BasicCard`/`TextCard` validate title/description length limits at construction time (fail fast on the 50/230/400-char caps), and `SkillController.cardOrText`/`textCardOrText` additionally `.take()` before constructing so runtime data can never trip that validation.
+`SkillController` builds Kakao BasicCard/TextCard responses (thumbnail + title/description + buttons) when `kakao.image-base-url` is configured (`prod`/`local`), and falls back to plain `simpleText` when it's blank (test profile / no images configured) — because a BasicCard's `thumbnail` field is **required** by Kakao's spec, so the fallback exists to keep responses valid when there's no image to show. `SkillResponse.BasicCard`/`TextCard` validate title/description length limits at construction time (fail fast on the 50/230/400-char caps), and `SkillController.cardOrText`/`textCardOrText` additionally `.take()` before constructing so runtime data can never trip that validation. Card type varies by command: START/GUESS → BasicCard (thumbnail), GIVEUP/RULES → TextCard (no thumbnail), RANKING/HELP → plain `simpleText`.
+
+### Kakao open-chat quirks (mentions, button prefill)
+
+Two easy-to-relitigate gotchas, both hardened by real deploy feedback (see `PLAN.md` STEP 12 and the `git log` around 2026-07-09):
+
+- **Ranking mentions must use `Mention(type = "botUserKey", ...)`**, not `"appUserId"`. `SkillController.formatRanking` fills `{{#mentions.userN}}` placeholders via `extra.mentions`, sourced from `RankingService`'s per-chatroom entries. `appUserId`-typed mentions only resolve when the bot has a Kakao app key linked to the channel, which isn't guaranteed — `botUserKey` (== the requester's `user.id`) always resolves in open chat. This was changed to `appUserId` and reverted same-day (commits `637a480` → `38382b8`); don't change it back without confirming app-key linkage first.
+- **`SkillResponse.Button.mentionPrefill` sends a zero-width space (`​`) as `messageText`, never `""` or `" "`.** In open chat, a `message`-action button prefills the input box with `"@봇 " + messageText`; if `messageText` is empty/blank, Kakao treats it as "no value" and substitutes the button's `label` instead (e.g. `"@봇 제출"` leaking the label). The zero-width space is invisible but non-blank, so only `"@봇 "` shows. Because that character then arrives prepended to the user's next utterance, `SkillController.play` strips zero-width chars (`zeroWidthChars` regex) before classification — remove that stripping and prefilled guesses like `"​1234"` silently stop matching `SkillCommand`'s `all isDigit()` check.
 
 ### Observability
 
