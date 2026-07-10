@@ -1,6 +1,3 @@
-chatbot:
-  name: 숫자야구 봇 테스트
-
 # dev(스테이징) 프로파일 — 같은 EC2에서 prod(8080)와 나란히 떠 있는 별도 인스턴스(9090).
 # 활성화: 서버 systemd(baseball-dev.service)에서 SPRING_PROFILES_ACTIVE=dev 로 지정.
 # application-prod.yml과 동일한 구조를 따른다: 이 파일은 레포에 커밋되지만 비밀은 담지 않고,

@@ -22,9 +22,6 @@ class SkillController(
     // 썸네일 이미지 베이스 URL. 비어 있으면(로컬/테스트 기본값) BasicCard 대신 simpleText로 폴백한다.
     // prod에서만 실제 URL(https://numbers-baseball.com/images)을 주입해 카드로 노출한다.
     @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
-    // 멘션 프리필 버튼(제출)의 mention 필드에 심을 봇 이름. 프로파일별로 실제 채널 이름과 맞춰 주입한다
-    // (prod "숫자야구봇" / dev "숫자야구 봇 테스트"). 로컬/테스트는 기본값으로 대체.
-    @Value("\${chatbot.name:숫자야구봇}") private val chatbotName: String,
 ) {
     /** 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다. */
     private enum class ResultImage(val file: String) {
@@ -38,9 +35,8 @@ class SkillController(
     /** 카드(BasicCard/TextCard) 노출 여부. 이미지 URL이 설정된 환경(prod/local)에서만 카드를 쓴다. */
     private val cardsEnabled: Boolean get() = imageBaseUrl.isNotBlank()
 
-    /** 멘션 프리필이 심던 제로폭 문자군(U+200B/C/D, U+FEFF). 과거 프리필 방식의 잔재 대비 방어적으로 제거한다. */
+    /** 멘션 프리필이 심는 제로폭 문자군(U+200B/C/D, U+FEFF). 발화 판정 전에 제거한다. */
     private val zeroWidthChars = Regex("[\\u200B\\u200C\\u200D\\uFEFF]")
-
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
      * 카카오 5초 타임아웃 안에 끝나야 하므로 무거운 작업은 두지 않는다.
@@ -53,6 +49,8 @@ class SkillController(
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val userId = request.userRequest.user.id
         val botKey = request.userRequest.chat?.properties?.botGroupKey
+        // 멘션 프리필 버튼이 심는 제로폭 공백(U+200B 등)을 제거한 뒤 판정한다.
+        // 이게 남으면 "​1234"가 숫자 판정(all isDigit)을 통과하지 못해 추측이 먹히지 않는다.
         val utterance = request.userRequest.utterance.replace(zeroWidthChars, "").trim()
         return handle(userId, botKey, utterance)
     }
@@ -74,7 +72,7 @@ class SkillController(
                     title = "⚾ 새 게임 시작",
                     description = text,
                     buttons = listOf(
-                        SkillResponse.Button.mentionPrefill("제출", chatbotName),
+                        SkillResponse.Button.mentionPrefill("제출"),
                         SkillResponse.Button.message("포기", "포기"),
                     ),
                     fallbackText = text,
@@ -154,7 +152,7 @@ class SkillController(
             description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
             // 오픈채팅에선 message 버튼 클릭 시 "@봇 "이 입력창에 프리필된다(즉시 전송 아님).
             // messageText를 빈 값으로 두어 멘션만 깔끔히 채워지도록 한다(실제 프리필 내용은 오픈채팅 테스트로 확인).
-            buttons = listOf(SkillResponse.Button.mentionPrefill("제출", chatbotName)),
+            buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
             // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
             fallbackText = "${outcome.tries}번째 시도: $sb",
         )

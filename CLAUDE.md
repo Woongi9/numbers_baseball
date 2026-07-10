@@ -53,7 +53,7 @@ Judging and scoring logic is deliberately kept free of Spring/JPA/Kakao so it's 
 - `ScoreCalculator.gain(tries, difficulty)` — `max(MIN_GAIN, BASE - tries*STEP) * difficulty.multiplier`.
 - `PercentileCalculator.of(higher, total)` — turns two counts into a rank/percentile, returns `null` below `MIN_SAMPLE` (avoids meaningless "top 100%" when there's no real cohort yet).
 - `RankTitle.of(topPercent)` — cosmetic tier badge for top percentiles.
-- `GameDifficulty` enum — `EASY`/`NORMAL`/`HARD`, each with a `symbols` candidate set and a score `multiplier`. Difficulty changes the *character set* for the answer (digits only vs. digits+letters), not the number of digits — digit count is fixed at `GameService.DIGITS = 4`. No `SkillCommand` currently lets a user pick a difficulty — `GameService.startGame` always defaults to `NORMAL`, so `EASY`/`HARD` exist in code but aren't reachable through the chat interface yet.
+- `GameDifficulty` enum — `EASY`/`NORMAL`/`HARD`, each with a `symbols` candidate set and a score `multiplier`. Difficulty changes the *character set* for the answer (digits only vs. digits+letters), not the number of digits — digit count is fixed at `GameService.DIGITS = 4`.
 
 `GameService` and `UserService` are the only places that touch persistence (`GameRepository`, `UserRepository`, `BotUserRepository`) and wrap the pure functions in `@Transactional` boundaries.
 
