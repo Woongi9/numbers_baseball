@@ -151,7 +151,7 @@ data class SkillResponse(
              *       "\u200B1234" 같은 값이 숫자 판정(all isDigit)을 통과한다.
              */
             fun mentionPrefill(label: String): Button =
-                Button(label = label, action = "message", messageText = ZERO_WIDTH_SPACE)
+                Button(label = label, action = "mention")
         }
     }
 
