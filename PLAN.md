@@ -739,13 +739,13 @@ SELECT COUNT(*) FROM users;
 - [ ] `SkillController` 발화 분기: `전체랭킹` → 전역 / `랭킹`(또는 `봇랭킹`) → 봇별 + 순위·점수 TOP 10 텍스트
 - [ ] **확인**: 두 명 이상 플레이 후 두 발화 모두 정렬된 목록 응답
 
-### 🟢 STEP F. 매월 1일 초기화 스케줄러 (선택: 배치 0 초기화)
-- [ ] `@EnableScheduling` + `@Scheduled(cron = "0 0 0 1 * *", zone = "Asia/Seoul")`
-- [ ] 벌크 update: `UPDATE users SET score = 0`, `UPDATE bot_users SET score = 0` (`@Modifying` 쿼리)
-- [ ] **운영 지표 로깅**: 리셋 행 수·소요시간 로깅, 실패 시 알림 *(평소 강조하는 "임팩트 측정·장애 감지")*
-- [ ] (권장) 리셋 직전 **스냅샷 저장**(`monthly_score_snapshot`) → 배치 실패 대비 + 추후 '지난달 순위' 확장 여지
-- [ ] 수동 트리거(테스트 프로파일 한정 엔드포인트/메서드)로 **멱등하게** 검증 가능하도록 분리
-- [ ] **확인**: 트리거 후 전 score=0, 다음 게임부터 새 시즌 누적
+### 🟢 STEP F. 매월 1일 초기화 스케줄러 (선택: 배치 0 초기화) ✅ 완료 (2026-07-11)
+- [x] `@EnableScheduling`(`BaseballApplication`) + `@Scheduled(cron = "0 0 0 1 * *", zone = "Asia/Seoul")`(`SeasonReset.reset()`)
+- [x] 벌크 update: `UPDATE User u SET u.score = 0`, `UPDATE BotUser b SET b.score = 0` (`@Modifying` JPQL, `WHERE score <> 0`으로 불필요 행 제외) — `UserRepository`/`BotUserRepository.resetAllScores()`
+- [x] **운영 지표 로깅**: `evt=season_reset users=.. bot_users=.. elapsedMs=..` 리셋 행 수·소요시간 로깅 *(실패 시 알림은 STEP 16 CloudWatch 알람에서 로그 기반으로 처리)*
+- [~] ~~리셋 직전 스냅샷 저장(`monthly_score_snapshot`)~~ — **스킵(YAGNI)**. '지난달 순위' 요구가 실제로 생기면 그때 추가.
+- [~] ~~수동 트리거 엔드포인트~~ — **스킵**. `reset()`이 공개 빈 메서드라 테스트가 직접 호출(멱등: 이미 0이면 0건). `ScoreResetTest`(H2 `@DataJpaTest`)가 러너블 체크.
+- [x] **확인**: `ScoreResetTest` — User/BotUser score → 전부 0 검증 통과. 전체 `./gradlew test` BUILD SUCCESSFUL
 
 ### 🟢 STEP G. 마무리 검증
 - [ ] 5초 내 응답(추가된 조회·적립 포함) / 동시 적립 정합성 테스트 / README 갱신

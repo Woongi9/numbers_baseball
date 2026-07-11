@@ -1,6 +1,8 @@
 package com.example.baseball.domain.user
 
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
 
 // User.id 는 Long PK 이므로 JpaRepository 의 ID 타입도 Long 이어야 한다.
 interface UserRepository : JpaRepository<User, Long> {
@@ -14,4 +16,9 @@ interface UserRepository : JpaRepository<User, Long> {
      * (동점은 제외되어 공동순위로 묶인다.)
      */
     fun countByScoreGreaterThan(score: Int): Long
+
+    /** 시즌(월간) 리셋: 전역 점수를 일괄 0으로. 반환값은 초기화된 행 수(로깅용). */
+    @Modifying
+    @Query("UPDATE User u SET u.score = 0 WHERE u.score <> 0")
+    fun resetAllScores(): Int
 }
