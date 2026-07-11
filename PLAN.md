@@ -607,22 +607,22 @@ SELECT COUNT(*) FROM users;
 #### 🔎 필요 변경사항 체크리스트
 
 **🔴 필수**
-- [ ] **`build.gradle.kts` jar 이름 분기** — 현재 `tasks.bootJar { archiveFileName.set("baseball.jar") }`가 프로파일과 무관하게 고정돼 있어, dev 빌드도 같은 파일명이 나온다. `profile == "dev"`일 때 `baseball-dev.jar`로 분기해야 prod 배포 스크립트와 파일이 섞이지 않는다.
+- [x] **`build.gradle.kts` jar 이름 분기** — 현재 `tasks.bootJar { archiveFileName.set("baseball.jar") }`가 프로파일과 무관하게 고정돼 있어, dev 빌드도 같은 파일명이 나온다. `profile == "dev"`일 때 `baseball-dev.jar`로 분기해야 prod 배포 스크립트와 파일이 섞이지 않는다. (2026-07-07 완료 — `build.gradle.kts`의 `bootJar { archiveFileName.set(if (profile == "dev") "baseball-dev.jar" else "baseball.jar") }`)
 - [x] **`src/main/resources/application-dev.yml` 신설** — `application-prod.yml`과 동일한 패턴(비밀은 담지 않고 `${DB_URL}` 등 env var로 주입). `server.port: 9090`, `DB_URL`을 `baseball_dev` 스키마로, `ddl-auto: update`(dev는 스키마 변경 자유), 이미지 베이스 URL은 `https://dev.numbers-baseball.com/images`, 로그 파일은 `server-dev.log`로 분리, Swagger는 켜둠. (2026-07-07 완료 — `resources-env/dev`가 아니라 prod와 같은 위치에 둔 이유: prod처럼 `SPRING_PROFILES_ACTIVE=dev` 런타임 활성화만으로 로드되므로 build-time 리소스 스위칭이 필요 없고, `resources-env/**`가 기본 gitignore 대상이라 그대로 두면 커밋에서 빠질 뻔했다.)
-- [ ] **RDS에 `baseball_dev` 스키마 생성 + 계정 권한 부여** — 콘솔/mysql client에서 1회 수행(`CREATE DATABASE baseball_dev; GRANT ... TO 'woong'@'%';` 형태). 기존 계정을 그대로 쓸지 dev 전용 계정을 팔지는 구현 시 결정.
-- [ ] **`deploy/baseball-dev.service` systemd 유닛 신설** — `EnvironmentFile`은 prod와 분리(`baseball-dev.env` 또는 같은 파일에 dev용 변수 추가), `Environment=SPRING_PROFILES_ACTIVE=dev`, `ExecStart=... -Xms128m -Xmx384m -jar /home/ubuntu/baseball-dev.jar`, 별도 유닛이라 `systemctl start/stop baseball-dev`로 prod와 독립적으로 제어된다.
-- [ ] **`deploy/nginx-baseball.conf`에 `dev.numbers-baseball.com` 서버 블록 추가** — 9090으로 프록시. 인증서는 현재 prod가 Cloudflare/certbot 중 어떤 방식으로 발급돼 있는지 서버에서 먼저 확인한 뒤, 같은 방식으로 서브도메인용을 추가 발급(Cloudflare 프록시를 쓰면 오리진 인증서 없이도 될 수 있음 — 서버 실제 설정 확인 필요).
-- [ ] **Cloudflare DNS에 `dev` 서브도메인 레코드 추가**.
-- [ ] **`deploy/scripts`를 dev와 공유 불가 — 분리 필요** — 현재 `start.sh`/`stop.sh`는 `SERVICE="baseball"`, `LIVE_JAR=.../baseball.jar`, `HEALTH_URL=http://localhost:8080/...`가 하드코딩돼 있어 그대로 재사용하면 prod를 건드린다. `start-dev.sh`/`stop-dev.sh`로 복제하거나(가장 단순, 지금 방식과 일관), 인자로 서비스명/포트를 받는 공용 스크립트로 리팩터링(중복 제거) 중 택1 — 이번엔 기존 스크립트가 아주 단순하므로 **복제** 쪽을 우선 고려.
-- [ ] **`.github/workflows/deploy-dev.yml` 신설** — `on.push.branches: [develop]`, `concurrency.group: deploy-dev`(prod의 `deploy-prod`와 별도 그룹이라 서로 취소하지 않음), `./gradlew clean test bootJar -Pprofile=dev`, `baseball-dev.jar` 업로드, `start-dev.sh`/`stop-dev.sh` 실행. 기존 `deploy.yml`(main→prod)은 손대지 않는다.
+- [x] **RDS에 `baseball_dev` 스키마 생성 + 계정 권한 부여** — 콘솔/mysql client에서 1회 수행(`CREATE DATABASE baseball_dev; GRANT ... TO 'woong'@'%';` 형태). 기존 계정을 그대로 쓸지 dev 전용 계정을 팔지는 구현 시 결정. (완료 — dev 배포가 실제 기동·헬스체크 통과 중이므로 스키마/권한 적용 확인됨)
+- [x] **`deploy/baseball-dev.service` systemd 유닛 신설** — `EnvironmentFile`은 prod와 분리(`baseball-dev.env` 또는 같은 파일에 dev용 변수 추가), `Environment=SPRING_PROFILES_ACTIVE=dev`, `ExecStart=... -Xms128m -Xmx384m -jar /home/ubuntu/baseball-dev.jar`, 별도 유닛이라 `systemctl start/stop baseball-dev`로 prod와 독립적으로 제어된다.
+- [x] **`deploy/nginx-baseball.conf`에 `dev.numbers-baseball.com` 서버 블록 추가** — 9090으로 프록시. 인증서는 현재 prod가 Cloudflare/certbot 중 어떤 방식으로 발급돼 있는지 서버에서 먼저 확인한 뒤, 같은 방식으로 서브도메인용을 추가 발급(Cloudflare 프록시를 쓰면 오리진 인증서 없이도 될 수 있음 — 서버 실제 설정 확인 필요).
+- [x] **Cloudflare DNS에 `dev` 서브도메인 레코드 추가**. (완료 — `dev.numbers-baseball.com` 배포/헬스체크 정상 확인, `88409ea deploy: fix nginx error in dev`)
+- [x] **`deploy/scripts`를 dev와 공유 불가 — 분리 필요** — 현재 `start.sh`/`stop.sh`는 `SERVICE="baseball"`, `LIVE_JAR=.../baseball.jar`, `HEALTH_URL=http://localhost:8080/...`가 하드코딩돼 있어 그대로 재사용하면 prod를 건드린다. `start-dev.sh`/`stop-dev.sh`로 복제하거나(가장 단순, 지금 방식과 일관), 인자로 서비스명/포트를 받는 공용 스크립트로 리팩터링(중복 제거) 중 택1 — 이번엔 기존 스크립트가 아주 단순하므로 **복제** 쪽을 우선 고려.
+- [x] **`.github/workflows/deploy-dev.yml` 신설** — `on.push.branches: [develop]`, `concurrency.group: deploy-dev`(prod의 `deploy-prod`와 별도 그룹이라 서로 취소하지 않음), `./gradlew clean test bootJar -Pprofile=dev`, `baseball-dev.jar` 업로드, `start-dev.sh`/`stop-dev.sh` 실행. 기존 `deploy.yml`(main→prod)은 손대지 않는다.
 
 **🟡 권장**
-- [ ] **sudoers에 `baseball-dev` start/stop/restart NOPASSWD 추가** — 기존 `baseball` 3종과 동일 패턴으로 `systemctl ... baseball-dev`도 등록.
+- [x] **sudoers에 `baseball-dev` start/stop/restart NOPASSWD 추가** — 기존 `baseball` 3종과 동일 패턴으로 `systemctl ... baseball-dev`도 등록. (완료 — CD가 `stop-dev.sh`/`start-dev.sh`로 systemd 유닛을 무중단 제어 중)
 - [ ] **dev 힙 사이즈 실측 후 조정** — 배포 직후 `free -h`(또는 CloudWatch `mem_used_percent`)로 두 JVM 동시 구동 시 여유를 확인하고, 압박 보이면 힙을 더 줄이거나 t4g.medium 전환을 검토.
-- [ ] **dev 배포도 헬스체크 실패 시 자동 롤백** — prod의 `start.sh`와 동일한 안전장치(`baseball-dev.jar.bak`)를 dev에도 그대로 적용.
+- [x] **dev 배포도 헬스체크 실패 시 자동 롤백** — prod의 `start.sh`와 동일한 안전장치(`baseball-dev.jar.bak`)를 dev에도 그대로 적용. (완료 — `start-dev.sh`에 백업/헬스체크/롤백 구현)
 
 **🟢 향후**
-- [ ] **dev 전용 카카오 테스트 채널(오픈빌더 봇)** — `dev.numbers-baseball.com/skill/play`를 스킬 URL로 등록한 별도 테스트봇을 만들면, `develop` 단계에서 실제 카톡 UX까지 회귀 확인 가능해진다(자동 배포 자체와는 별개로, 필요할 때 수동 연결).
+- [x] **dev 전용 카카오 테스트 채널(오픈빌더 봇)** — `dev.numbers-baseball.com/skill/play`를 스킬 URL로 등록한 별도 테스트봇을 만들면, `develop` 단계에서 실제 카톡 UX까지 회귀 확인 가능해진다(자동 배포 자체와는 별개로, 필요할 때 수동 연결). (완료 — 테스트봇 연결 후 실제 카톡 UX 회귀 확인, `1.0 테스트 배포 후 피드백` 반영)
 
 #### 내부 동작 순서
 ```
@@ -969,6 +969,40 @@ STEP 9 STEP C(점수 적립) 완료
 | INF-1 | `docker-compose.yml`, MySQL용 `local`/H2 `test` 프로파일 | 로컬 게임 → MySQL row, `test` 통과 |
 | INF-2 | RDS, EC2, `sg-ec2`/`sg-rds`, `prod` 프로파일, systemd `.env` | EC2→RDS 접속, `curl https` 정답 |
 | INF-3 | `.github/workflows/deploy.yml`, GitHub Secrets | `main` 푸시 → 자동 배포 + 헬스체크 |
+
+---
+
+## 6-D. 🚦 [2026-07-11 추가] 출시 전 최종 우선순위 재점검 (코드 대조 결과)
+
+> **배경**: "기능은 잘 동작 확인 → 남은 건 CloudWatch 모니터링 & 부하 테스트 정도"라는 판단을 PLAN + **실제 코드 대조**로 검증. 결론: 인프라 두 항목(모니터링·부하)은 맞지만, 그 **앞에 놓쳐선 안 될 기능 갭 1개**(시즌 리셋)와 **두 항목의 순서**를 바로잡아야 계획이 완결된다.
+
+### 🔴 발견 1 — 월간 시즌 리셋 스케줄러(STEP F)가 미구현
+
+- **근거**: 점수 시스템 전체가 *"매월 1일 0시(Asia/Seoul) 0 리셋 시즌제"* 를 전제로 설계됨.
+  - `ScoreCalculator` 주석: "매월 0 리셋 시즌제 → 패배 감점이 구조적으로 없다"를 감점 부재의 **근거**로 사용.
+  - 승리 응답: `"이번 시즌 상위 N% (rank/total)"` 로 나감(`SkillController`).
+- **실측**: 코드 전체에 `@Scheduled` / `@EnableScheduling` **전무**. → 지금 오픈하면 점수가 **영원히 누적**되고 시즌이 바뀌지 않음.
+- **연쇄**: STEP 13이 전제한 *"월초 리셋 타이밍에 빈 상태로 오픈"* 이 성립하려면 리셋 배치 자체가 먼저 존재해야 함. 따라서 **모니터링·부하보다 선행**.
+- **할 일**: STEP F(6-B) 그대로 구현 — `@EnableScheduling` + `@Scheduled(cron="0 0 0 1 * *", zone="Asia/Seoul")` → `UPDATE users/bot_users SET score=0`(`@Modifying` 벌크) + 리셋 건수·소요 로깅 + (권장) 스냅샷 + 수동 트리거로 멱등 검증.
+
+### 🟡 발견 2 — 모니터링 → 부하 테스트 **순서**로 (묶지 말고)
+
+- 부하를 먼저 때리면 그 순간 CPU/메모리/응답시간을 볼 관측 수단이 없어 결과가 반쪽.
+- **모니터링(지표+알람)을 먼저** 세우면 부하 테스트가 곧 그 대시보드/알람의 **검증**이 되어 시너지. t4g.small에 prod+dev JVM 2개가 떠 있으니 부하 중 `mem_used_percent` 실측(STEP 13-B 잔여 숙제)도 함께 확인.
+- **이미 된 절반**: 요청/응답시간 구조화 로깅은 `LogTraceAspect`(@Around, `SLOW_THRESHOLD_MS=3000`)로 완료. 남은 건 이를 **CloudWatch 지표/알람**으로 승격하는 부분.
+
+### 출시 전 우선순위 (확정)
+
+| 순위 | 항목 | 상태 | 관련 STEP |
+|------|------|------|-----------|
+| 1 | **월간 시즌 리셋 스케줄러** | ✅ 완료 (2026-07-11) — `SeasonReset` + `@EnableScheduling` | STEP F (6-B) |
+| 2 | CloudWatch **지표/알람** (모니터링) | 🔶 로깅만 됨(AOP), 지표·알람 남음 | STEP 16 |
+| 3 | **부하 테스트** (p95/p99·에러율·5초 초과율) | ❌ 남음 | STEP 13 |
+| 4 | 스모크 테스트 체크리스트 고정 + 출시 전 더미데이터 정리 | ❌ 남음 | STEP 13 |
+
+**추후로 미뤄도 되는 것(출시 필수 아님, 이미 🟡 분류됨)**: 점수 조회 발화(`점수`/`내점수`, STEP D) · 전체랭킹(STEP E/14) · 어려움 모드 추측·판정(STEP 14) · 시간 가중 점수(STEP 11).
+
+> **한 줄 요약**: 남은 인프라(모니터링·부하)는 맞지만, **① 시즌 리셋 스케줄러(STEP F)를 먼저** 막고 → **② 모니터링을 세운 뒤 → ③ 그 위에서 부하 테스트**하는 순서가 맞다. 요청 로깅은 이미 AOP로 완료돼 있으므로 모니터링은 "지표/알람 승격"만 남았다.
 
 ---
 
