@@ -7,6 +7,7 @@
 - EC2 에 IAM 역할 부착(신뢰 주체 EC2) + 정책: `CloudWatchAgentServerPolicy`, `CloudWatchFullAccessV2`, `AmazonSNSFullAccess`.
 - CloudWatch Agent 구동 중 — `sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status` 가 `running`.
 - 로그 그룹 `/baseball/app` 존재(Agent 가 로그 보내면 자동 생성).
+- `cwagent` 유저가 `server.log` 읽기 가능해야 함 — `/home/ubuntu`(0750) traverse 위해 `sudo usermod -aG ubuntu cwagent` 후 Agent 재기동. 안 하면 지표는 오는데 **로그만 0건**.
 
 ## 실행
 
@@ -39,7 +40,7 @@ ALARM_EMAIL=you@example.com INSTANCE_ID=i-xxxx ./setup-cloudwatch.sh
 | `baseball-cpu-credit-low` | `AWS/EC2/CPUCreditBalance` | Avg / 5분 / 2회(10분) | < 60 |
 | `baseball-cpu-high` | `AWS/EC2/CPUUtilization` | Avg / 5분 / 2회(10분) | > 70% |
 
-- `error_count` 는 정상 유저 입력 예외(잘못된 추측 등)도 `status=ERROR` 로 남아서 `>10` 스파이크만 잡음.
+- `error_count` 는 진짜 서버 장애만 셈 — 정상 유저 입력 예외(잘못된 추측·"게임 없음")는 `REJECTED` 로 분리됨(커밋 24362b3). `>10` 은 보수적 시작값.
 - `slow_count` 는 3초(`SLOW_THRESHOLD_MS`) 초과 = 카카오 5초 타임아웃 직전 신호.
 - 모든 알람 `TreatMissingData=notBreaching`(데이터 없음 = 정상).
 
@@ -49,7 +50,7 @@ ALARM_EMAIL=you@example.com INSTANCE_ID=i-xxxx ./setup-cloudwatch.sh
 aws cloudwatch describe-alarms --region ap-northeast-2 \
   --alarm-name-prefix baseball- --query 'MetricAlarms[].AlarmName'
 ```
-5개 나오면 성공. 이후 잘못된 추측 여러 번 → `error_count` 증가 확인.
+5개 나오면 성공. `error_count` 는 진짜 서버 예외에서만 오름(잘못된 추측은 `REJECTED` 라 안 잡힘) — `slow_count`(3초 초과 요청)로 실동작 확인 가능.
 
 ## 삭제/재설정
 
