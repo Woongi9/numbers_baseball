@@ -9,15 +9,24 @@
 출시 전(실사용자 0) 단계에서 서버/앱 이상을 이메일로 조기 감지한다. 모니터링을 먼저 깔아두면
 이후 부하 테스트가 곧 이 대시보드/알람의 실검증이 된다. 앱 코드 변경 없음 — 100% AWS 인프라 작업.
 
-## 전제 (이미 완료된 기반)
+## 전제 (기반)
 
-- `deploy/amazon-cloudwatch-agent.json` — CloudWatch Agent 가 `mem_used_percent`, `disk_used_percent`
-  수집(네임스페이스 `CWAgent`) + `/home/ubuntu/logs/server.log` 를 로그 그룹 `/baseball/app` 로 전송.
+원래 "이미 완료"로 적었으나 EC2 점검 결과 Agent/CLI/IAM 모두 미설치였음. 2026-07-12 아래를 실제 구축 완료:
+
+- IAM 역할(신뢰 주체 EC2) 생성 + 인스턴스 `i-0d131fd9dd2bc8eee` 부착. 정책 3개
+  (`CloudWatchAgentServerPolicy`, `CloudWatchFullAccessV2`, `AmazonSNSFullAccess`).
+- EC2 에 AWS CLI 설치(`aws-cli/2.35.21`), `aws sts get-caller-identity` 역할로 정상 동작.
+- CloudWatch Agent 설치 + 구동(`status: running`). config 는 `deploy/amazon-cloudwatch-agent.json`
+  기준 — `mem_used_percent`/`disk_used_percent`(네임스페이스 `CWAgent`) 수집 +
+  `/home/ubuntu/logs/server.log` 를 로그 그룹 `/baseball/app` 로 전송.
+
+앱/인프라 측 이미 존재:
+
 - `application-prod.yml` — `logging.file.name: /home/ubuntu/logs/server.log` (Agent 가 tail 하는 파일).
 - `LogTraceAspect` — 요청 1건당 한 줄 구조화 로그. `status=ERROR(...)`, `slow=true` 토큰 포함.
 - EC2 기본 지표(`AWS/EC2`)는 별도 설정 없이 `CPUUtilization`, `CPUCreditBalance` 제공.
 
-남은 작업 = Metric Filter 2개 + 알람 5개 + SNS 토픽/구독 생성, 그리고 Agent 실제 구동 확인.
+남은 작업 = Metric Filter 2개 + 알람 5개 + SNS 토픽/구독 생성(= `deploy/monitoring/setup-cloudwatch.sh`).
 
 ## 접근
 
@@ -45,7 +54,7 @@ EC2 기본 지표 -> AWS/EC2 -> CPUUtilization, CPUCreditBalance
 
 | 이름 | 필수 | 기본값 | 비고 |
 |------|------|--------|------|
-| `ALARM_EMAIL` | O | (없음) | 알람 수신 이메일. **커밋 파일에 실주소 박지 않음**(레포 노출 방지). jinung9544 아닌 별도 주소. |
+| `ALARM_EMAIL` | O | (없음) | 알람 수신 이메일. **커밋 파일에 실주소 박지 않음**(레포 노출 방지). 개인 상용 주소 아닌 별도 주소. |
 | `INSTANCE_ID` | O | (없음) | 대상 EC2. 미지정 시 명확히 실패(임의 인스턴스 방지). |
 | `REGION` | X | `ap-northeast-2` | |
 | `LOG_GROUP` | X | `/baseball/app` | |
@@ -101,7 +110,7 @@ EC2 기본 지표 -> AWS/EC2 -> CPUUtilization, CPUCreditBalance
 ### 사전 준비
 - [ ] AWS CLI 자격증명 확인 (`aws sts get-caller-identity`)
 - [ ] 대상 `INSTANCE_ID` 확인 (`aws ec2 describe-instances`)
-- [ ] 알람 수신용 별도 이메일 주소 결정 (jinung9544 아님)
+- [ ] 알람 수신용 별도 이메일 주소 결정 (개인 상용 주소 아님)
 - [ ] EC2 에서 CloudWatch Agent 실제 구동 확인 (`amazon-cloudwatch-agent-ctl -a status`), 미구동 시 설치/기동
 - [ ] 로그 그룹 `/baseball/app` 생성됐는지 확인 (Agent 가 로그 보내면 자동 생성)
 
