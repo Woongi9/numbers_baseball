@@ -111,7 +111,9 @@ EC2 기본 지표 -> AWS/EC2 -> CPUUtilization, CPUCreditBalance
    (예: DB 다운)를 유발하거나, `slow_count` 는 3초 초과 요청으로 확인. Logs Insights 에서
    `/baseball/app` 로그 그룹 조회로 유입도 함께 확인.
 4. Agent 구동 확인: `amazon-cloudwatch-agent-ctl -a status`.
-5. 실부하 검증은 다음 STEP(부하 테스트)에서 알람 실동작으로 확인.
+5. 실부하 검증 완료(2026-07 부하 테스트 4단계, `docs/load-test-guide.md`). 단 부하가 용량 대비
+   여유가 커서 error/CPU/크레딧/메모리 알람은 **트리거 미발생**(정상 = 임계치 밑 베이스라인 확인).
+   `slow_count` 만 Soak `max=6.76s` 이상치 1건으로 실증 데이터 1건 유입.
 
 ## 범위 밖 (YAGNI)
 
@@ -141,10 +143,10 @@ EC2 기본 지표 -> AWS/EC2 -> CPUUtilization, CPUCreditBalance
 - [x] 실제 실행 (`ALARM_EMAIL=... INSTANCE_ID=... ./setup-cloudwatch.sh`) — 첫 실행은 로그 그룹 부재로 `put-metric-filter` 실패 → 스크립트에 `create-log-group` 보강 후 재실행 성공
 - [x] SNS 구독 확인 이메일 클릭 — `Subscription confirmed` (구독 ARN `...:baseball-alarms:d2a1c21d-...`). 이제 알람 이메일 수신됨
 - [x] `aws cloudwatch describe-alarms` 5개 확인 — 5개 모두 확인됨(`baseball-error-spike/slow-requests/mem-high/cpu-credit-low/cpu-high`)
-- [ ] `error_count` 실동작 확인 — **다음 STEP(부하 테스트)에서 검증 예정**. 잘못된 추측은 이제 `REJECTED` 라 안 잡힘 → 진짜 서버 예외 또는 `slow_count` 로 대체 검증
+- [x] `error_count` 실동작 확인 — 부하 테스트 완료했으나 4단계 모두 서버 예외 0(전부 200) → `error_count` **트리거 이벤트 없음**(정상). 진짜 서버 예외로의 실증은 미완 = 알람 정의·연결만 확인, 실화재 미검증. `slow_count` 는 Soak 6.76s 이상치 1건 유입됨
 - [x] 커밋 (실이메일 미포함 확인 후) — `1be3c9d feat: CloudWatch 모니터링 셋업 스크립트 + 문서` 커밋·푸시 완료
 
 ### 후속(범위 밖, 별도 STEP)
-- [ ] 부하 테스트로 알람 실동작 검증
-- [ ] 베이스라인 확보 후 임계치 튜닝
+- [x] 부하 테스트로 알람 실동작 검증 — 4단계(Smoke/Load/Stress/Soak) 모두 p99<5s·0% 실패. 부하가 용량 대비 여유 커서 알람 트리거 없음(정상=베이스라인 확인). `slow_count` 만 6.76s 이상치 1건 유입. 상세 `docs/load-test-guide.md`
+- [x] 베이스라인 확보 — CPU 버스터블 베이스라인 밑·`CPUCreditBalance` 평탄·메모리 무증가 확인. 현 임계치로 오탐 없음 → **임계치 튜닝 불필요**, 실트래픽 늘면 재검토
 - [ ] (선택) RDS 알람, 대시보드 추가
