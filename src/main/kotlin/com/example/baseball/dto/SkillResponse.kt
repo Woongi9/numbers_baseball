@@ -152,6 +152,10 @@ data class SkillResponse(
              */
             fun mentionPrefill(label: String): Button =
                 Button(label = label, action = "mention")
+
+            /** 안내/막다른 응답 공용 버튼: 멘션(오픈채팅 프리필) + 도움말 재발화. */
+            fun guideButtons(): List<Button> =
+                listOf(mentionPrefill("멘션"), message("도움말", "도움말"))
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.baseball.controller
 
 import com.example.baseball.dto.SkillResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 
@@ -15,15 +16,32 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
  * - 범위를 SkillController 로 한정해 다른 컨트롤러의 예외까지 가로채지 않는다.
  */
 @RestControllerAdvice(assignableTypes = [SkillController::class])
-class SkillExceptionHandler {
+class SkillExceptionHandler(
+    // 카드 노출 여부 판단용(비어 있으면 simpleText 폴백). SkillController와 동일 규칙.
+    @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
+) {
 
     /** 진행 중 게임 없음 등 상태 오류. */
     @ExceptionHandler(IllegalStateException::class)
     fun handleIllegalState(e: IllegalStateException): SkillResponse =
-        SkillResponse.text(e.message ?: "게임 상태를 확인할 수 없습니다.")
+        guide(e.message ?: "게임 상태를 확인할 수 없습니다.")
 
     /** 자릿수/중복/숫자 외 문자 등 입력 규칙 위반. */
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleIllegalArgument(e: IllegalArgumentException): SkillResponse =
-        SkillResponse.text(e.message ?: "입력이 올바르지 않습니다.")
+        guide(e.message ?: "입력이 올바르지 않습니다.")
+
+    /**
+     * 안내 메시지를 [멘션·도움말] 버튼과 함께 TextCard로 응답한다.
+     * 카드 미설정(테스트/기본) 환경에선 버튼 없는 simpleText로 폴백한다.
+     */
+    private fun guide(message: String): SkillResponse {
+        if (imageBaseUrl.isBlank()) return SkillResponse.text(message)
+        return SkillResponse.textCard(
+            SkillResponse.TextCard(
+                description = message.take(SkillResponse.TextCard.DESC_MAX),
+                buttons = SkillResponse.Button.guideButtons(),
+            ),
+        )
+    }
 }

@@ -107,7 +107,12 @@ class SkillController(
                 )
             }
 
-            SkillCommand.HELP -> SkillResponse.text(helpMessage())
+            SkillCommand.HELP -> textCardOrText(
+                title = "📖 숫자야구 사용법",
+                description = helpMessage(),
+                buttons = SkillResponse.Button.guideButtons(),
+                fallbackText = helpMessage(),
+            )
         }
 
     /**
