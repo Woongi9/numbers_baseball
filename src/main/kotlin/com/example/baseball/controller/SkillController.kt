@@ -72,8 +72,8 @@ class SkillController(
                     title = "⚾ 새 게임 시작",
                     description = text,
                     buttons = listOf(
-                        SkillResponse.Button.mentionPrefill("제출"),
                         SkillResponse.Button.message("포기", "포기"),
+                        SkillResponse.Button.mentionPrefill("제출"),
                     ),
                     fallbackText = text,
                 )

@@ -39,11 +39,11 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
                 value("https://img.test/images/start.png")
             }
-            // 시작 카드 버튼은 [제출(멘션 프리필), 포기] 이다.
+            // 시작 카드 버튼은 [포기, 제출(멘션 프리필)] 순이다(제출을 우측에 둔다).
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("mention") }
-            jsonPath("$.template.outputs[0].basicCard.buttons[1].label") { value("포기") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("포기") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[1].label") { value("제출") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[1].action") { value("mention") }
         }
     }
 
