@@ -139,8 +139,8 @@ class SkillController(
                 title = headline,
                 description = body,
                 buttons = listOf(
-                    SkillResponse.Button.message("시작", "시작"),
                     SkillResponse.Button.message("랭킹", "랭킹"),
+                    SkillResponse.Button.message("시작", "시작"),
                 ),
                 fallbackText = "$headline\n$body",
             )

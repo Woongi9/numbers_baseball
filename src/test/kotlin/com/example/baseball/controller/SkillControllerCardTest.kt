@@ -67,8 +67,8 @@ class SkillControllerCardTest @Autowired constructor(
                 value("https://img.test/images/answer.png")
             }
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("시작") }
-            jsonPath("$.template.outputs[0].basicCard.buttons[1].messageText") { value("랭킹") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("랭킹") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[1].messageText") { value("시작") }
         }
     }
 
