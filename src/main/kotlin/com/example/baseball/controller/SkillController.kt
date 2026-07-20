@@ -32,19 +32,17 @@ class SkillController(
      * `?v=N`으로 URL을 바꿔 전 캐시 계층을 강제 갱신한다(PLAN STEP 12 "파일명 버저닝" 대체).
      * ponytail: 전역 버전 1개 — 이미지 하나만 바꿔도 5종 URL이 다 바뀜(재요청). 이미지가 작고 드물게 바뀌어 무해.
      */
-    private val imageVersion = "3"
+    private val imageVersion = "4"
 
     /**
-     * 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다.
-     * wideRatio=true 면 2:1(800×400, fixedRatio=false)로 노출 — 세로 공간을 줄인다(피드백 ①B).
-     * false 면 1:1(800×400 아님, 800×800, fixedRatio=true)로 크롭 없이 정사각 노출.
+     * 이미지 카드로 노출하는 3종 썸네일(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다.
+     * 전부 2:1(800×400)이라 fixedRatio=false(네이티브 2:1, 크롭 없음)로 노출한다.
+     * 진행중 추측(strike/ball/out)은 이미지 없이 TextCard로 응답한다.
      */
-    private enum class ResultImage(val file: String, val wideRatio: Boolean = false) {
-        START("start.png", wideRatio = true), // 2:1 배너형(세로폭 축소)
-        STRIKE("strike.png"), // 스트라이크 1개 이상
-        BALL("ball.png"),     // 스트라이크 0 + 볼 1개 이상
-        OUT("out.png"),       // 0S 0B
+    private enum class ResultImage(val file: String) {
+        START("start.png"),   // 새 게임 시작
         ANSWER("answer.png"), // 정답(승리)
+        GIVEUP("giveup.png"), // 포기
     }
 
     /** 카드(BasicCard/TextCard) 노출 여부. 이미지 URL이 설정된 환경(prod/local)에서만 카드를 쓴다. */
@@ -75,7 +73,7 @@ class SkillController(
      * 입력 규칙 위반·진행중 게임 없음 등은 예외로 던지고, SkillExceptionHandler 가 안내 메시지로 변환한다.
      * (예외를 여기서 삼키지 않아야 LogTraceAspect 가 실패를 관측할 수 있다 — 9-F 증상 4)
      *
-     * 카드 전환 범위: START(시작)·GUESS(추측)은 BasicCard(썸네일), GIVEUP(포기)은 TextCard(썸네일 없음), RANKING/RULES/HELP은 simpleText.
+     * 카드 전환 범위: START(시작)·승리·GIVEUP(포기)은 BasicCard(썸네일), 진행중 추측·RULES/HELP은 TextCard(썸네일 없음), RANKING은 simpleText.
      */
     private fun handle(userId: String, botKey: String?, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
@@ -96,8 +94,8 @@ class SkillController(
 
             SkillCommand.GIVEUP -> {
                 val answer = gameService.giveUp(userId)
-                // 포기는 썸네일 없이 버튼만 필요 → 이미지 없는 textCard 사용(패배 이미지 미준비).
-                textCardOrText(
+                cardOrText(
+                    image = ResultImage.GIVEUP,
                     title = "🏳️ 게임 포기",
                     description = "정답은 $answer 였습니다. 다시 도전해보세요!",
                     buttons = listOf(
@@ -132,8 +130,8 @@ class SkillController(
 
     /**
      * 추측 결과를 카드/텍스트로 변환한다.
-     * - 승리: answer 썸네일 + [시작, 랭킹]
-     * - 진행중: 아웃/스트라이크/볼 썸네일 + [제출](오픈채팅 멘션 프리필용)
+     * - 승리: answer 썸네일 BasicCard + [랭킹, 시작]
+     * - 진행중: 이미지 없는 TextCard(판정 문구) + [제출](오픈채팅 멘션 프리필용)
      * 폴백 문구는 기존 simpleText와 동일하게 유지(하위 호환·테스트 안정).
      */
     private fun formatGuess(outcome: GuessOutcome): SkillResponse {
@@ -160,14 +158,13 @@ class SkillController(
                 fallbackText = "$headline\n$body",
             )
         }
-        // 진행중: 아웃(0S0B) → 스트라이크(1개+) → 볼 순으로 썸네일을 고른다.
-        val (image, sb) = when {
-            r.isOut -> ResultImage.OUT to "OUT (0S 0B)"
-            r.strike > 0 -> ResultImage.STRIKE to "${r.strike}S ${r.ball}B"
-            else -> ResultImage.BALL to "0S ${r.ball}B"
+        // 진행중: 이미지 없이 판정 문구(1S 2B 등)만 TextCard로 응답한다.
+        val sb = when {
+            r.isOut -> "OUT (0S 0B)"
+            r.strike > 0 -> "${r.strike}S ${r.ball}B"
+            else -> "0S ${r.ball}B"
         }
-        return cardOrText(
-            image = image,
+        return textCardOrText(
             title = sb,
             description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
             // 오픈채팅에선 message 버튼 클릭 시 "@봇 "이 입력창에 프리필된다(즉시 전송 아님).
@@ -194,8 +191,8 @@ class SkillController(
             thumbnail = SkillResponse.Thumbnail(
                 imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}?v=$imageVersion",
                 altText = title.take(SkillResponse.BasicCard.TITLE_MAX),
-                // 1:1 이미지는 fixedRatio=true(크롭 방지). 2:1 배너(START)는 false로 네이티브 2:1 노출.
-                fixedRatio = !image.wideRatio,
+                // 썸네일 3종 전부 2:1 → fixedRatio=false(네이티브 2:1, 크롭 없음).
+                fixedRatio = false,
             ),
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.BasicCard.DESC_MAX),

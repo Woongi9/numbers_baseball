@@ -42,7 +42,7 @@ class SkillControllerCardTest @Autowired constructor(
             status { isOk() }
             jsonPath("$.template.outputs[0].simpleText") { doesNotExist() }
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
-                value("https://img.test/images/start.png?v=3")
+                value("https://img.test/images/start.png?v=4")
             }
             // 시작 이미지는 2:1 배너 → fixedRatio=false(네이티브 2:1, 크롭 없음)
             jsonPath("$.template.outputs[0].basicCard.thumbnail.fixedRatio") { value(false) }
@@ -71,7 +71,7 @@ class SkillControllerCardTest @Autowired constructor(
         }.andExpect {
             status { isOk() }
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
-                value("https://img.test/images/answer.png?v=3")
+                value("https://img.test/images/answer.png?v=4")
             }
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("랭킹") }
@@ -80,7 +80,7 @@ class SkillControllerCardTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("오답(진행중) 응답은 멘션 프리필용 '제출' 버튼 하나를 가진다")
+    @DisplayName("오답(진행중) 응답은 썸네일 없는 textCard + 멘션 프리필용 '제출' 버튼 하나다")
     fun ongoingReturnsSubmitButton() {
         val userId = "card-ongoing"
         mockMvc.post("/skill/play") {
@@ -96,10 +96,10 @@ class SkillControllerCardTest @Autowired constructor(
             content = body(wrong, userId)
         }.andExpect {
             status { isOk() }
-            jsonPath("$.template.outputs[0].basicCard.thumbnail.fixedRatio") { value(true) }
-            jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(1) }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
-            jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("mention") }
+            jsonPath("$.template.outputs[0].basicCard") { doesNotExist() } // 썸네일 없음
+            jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(1) }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].label") { value("제출") }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].action") { value("mention") }
         }
     }
 
@@ -135,8 +135,8 @@ class SkillControllerCardTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("포기 응답은 썸네일 없는 textCard + [게임 규칙, 시작] 버튼이다")
-    fun giveUpReturnsTextCard() {
+    @DisplayName("포기 응답은 giveup 썸네일 basicCard + [게임 규칙, 시작] 버튼이다")
+    fun giveUpReturnsCard() {
         val userId = "card-giveup"
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
@@ -148,11 +148,13 @@ class SkillControllerCardTest @Autowired constructor(
             content = body("포기", userId)
         }.andExpect {
             status { isOk() }
-            jsonPath("$.template.outputs[0].basicCard") { doesNotExist() } // 썸네일 없음
-            jsonPath("$.template.outputs[0].textCard.title") { value("🏳️ 게임 포기") }
-            jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(2) }
-            jsonPath("$.template.outputs[0].textCard.buttons[0].messageText") { value("게임 규칙") }
-            jsonPath("$.template.outputs[0].textCard.buttons[1].messageText") { value("시작") }
+            jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
+                value("https://img.test/images/giveup.png?v=4")
+            }
+            jsonPath("$.template.outputs[0].basicCard.title") { value("🏳️ 게임 포기") }
+            jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
+            jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("게임 규칙") }
+            jsonPath("$.template.outputs[0].basicCard.buttons[1].messageText") { value("시작") }
         }
     }
 }

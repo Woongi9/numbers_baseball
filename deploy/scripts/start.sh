@@ -67,7 +67,9 @@ echo "$TIME_NOW > 배포 성공 (서비스 UP)" >> "$DEPLOY_LOG"
 #    이미지를 Spring 앱이 서빙하므로, 재시작 직후 첫 요청이 콜드 캐시로 실패해 카카오/클라이언트
 #    말풍선에 빈 이미지가 굳는 것을 막는다. best-effort — 실패해도 배포는 성공으로 둔다.
 WARM_BASE="https://numbers-baseball.com/images"
-for img in start strike ball out answer; do
-  code=$(curl -fsS -o /dev/null -w '%{http_code}' -m 10 "$WARM_BASE/$img.png" || echo "FAIL")
-  echo "$TIME_NOW > 이미지 프리워밍 $img.png -> $code" >> "$DEPLOY_LOG"
+# IMAGE_VERSION 은 SkillController.imageVersion 과 일치해야 실제 카드 URL(?v=N)을 데운다. 이미지 교체 시 함께 올린다.
+IMAGE_VERSION="4"
+for img in start answer giveup; do
+  code=$(curl -fsS -o /dev/null -w '%{http_code}' -m 10 "$WARM_BASE/$img.png?v=$IMAGE_VERSION" || echo "FAIL")
+  echo "$TIME_NOW > 이미지 프리워밍 $img.png?v=$IMAGE_VERSION -> $code" >> "$DEPLOY_LOG"
 done
