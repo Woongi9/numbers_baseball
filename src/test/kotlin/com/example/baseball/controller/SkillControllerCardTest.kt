@@ -18,7 +18,12 @@ import org.springframework.test.web.servlet.post
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties = ["kakao.image-base-url=https://img.test/images"])
+@TestPropertySource(
+    properties = [
+        "kakao.image-base-url=https://img.test/images",
+        "kakao.mention-button-label=@테스트봇에게 말하기",
+    ],
+)
 @DisplayName("스킬 컨트롤러 - BasicCard 경로 (이미지 URL 설정 시)")
 class SkillControllerCardTest @Autowired constructor(
     private val mockMvc: MockMvc,
@@ -93,6 +98,20 @@ class SkillControllerCardTest @Autowired constructor(
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(1) }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("제출") }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].action") { value("mention") }
+        }
+    }
+
+    @Test
+    @DisplayName("안내(예외) 카드의 멘션 버튼 라벨은 설정값(kakao.mention-button-label)을 따른다")
+    fun guideCardUsesConfiguredMentionLabel() {
+        // 진행 중 게임 없이 추측 → IllegalStateException → 안내 TextCard
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = body("1234", "card-guide")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].label") { value("@테스트봇에게 말하기") }
+            jsonPath("$.template.outputs[0].textCard.buttons[0].action") { value("mention") }
         }
     }
 

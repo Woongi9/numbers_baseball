@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 class SkillExceptionHandler(
     // 카드 노출 여부 판단용(비어 있으면 simpleText 폴백). SkillController와 동일 규칙.
     @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
+    // 안내 카드의 멘션 버튼 라벨(SkillController와 동일 설정).
+    @Value("\${kakao.mention-button-label:멘션}") private val mentionButtonLabel: String,
 ) {
 
     /** 진행 중 게임 없음 등 상태 오류. */
@@ -40,7 +42,7 @@ class SkillExceptionHandler(
         return SkillResponse.textCard(
             SkillResponse.TextCard(
                 description = message.take(SkillResponse.TextCard.DESC_MAX),
-                buttons = SkillResponse.Button.guideButtons(),
+                buttons = SkillResponse.Button.guideButtons(mentionButtonLabel),
             ),
         )
     }

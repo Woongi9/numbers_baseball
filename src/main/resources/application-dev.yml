@@ -16,6 +16,7 @@ logging:
 # BasicCard 썸네일 베이스 URL. dev 서브도메인으로 고정.
 kakao:
   image-base-url: ${KAKAO_IMAGE_BASE_URL:https://dev.numbers-baseball.com/images}
+  mention-button-label: "@숫자야구 봇 테스트"
 
 spring:
   application:
