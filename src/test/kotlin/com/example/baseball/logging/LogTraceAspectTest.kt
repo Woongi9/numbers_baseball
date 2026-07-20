@@ -1,5 +1,9 @@
 package com.example.baseball.logging
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.example.baseball.dto.SkillRequest
 import com.example.baseball.dto.SkillResponse
 import io.mockk.every
@@ -8,9 +12,11 @@ import org.aspectj.lang.ProceedingJoinPoint
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 @DisplayName("LogTraceAspect - 요청 로깅 래퍼")
 class LogTraceAspectTest {
@@ -48,6 +54,35 @@ class LogTraceAspectTest {
     fun rethrowsException() {
         val jp = joinPoint { throw IllegalStateException("진행 중인 게임이 없습니다.") }
         assertThrows(IllegalStateException::class.java) { aspect.trace(jp) }
+    }
+
+    /** "SkillTrace" 로거에 ListAppender 를 붙여 phase=END 한 줄을 캡처한다. */
+    private fun captureEndLine(behavior: () -> Any?): ILoggingEvent {
+        val logger = LoggerFactory.getLogger("SkillTrace") as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            runCatching { aspect.trace(joinPoint(behavior)) }
+        } finally {
+            logger.detachAppender(appender)
+        }
+        return appender.list.first { it.formattedMessage.contains("phase=END") }
+    }
+
+    @Test
+    @DisplayName("예상된 입력/상태 예외는 REJECTED 로 남겨 error_count 에 안 잡힌다")
+    fun expectedExceptionsAreRejectedNotError() {
+        val end = captureEndLine { throw IllegalArgumentException("자릿수가 올바르지 않습니다.") }
+        assertTrue(end.formattedMessage.contains("status=REJECTED"), end.formattedMessage)
+        assertTrue(end.level != Level.ERROR, "예상된 예외는 ERROR 레벨이면 안 됨")
+    }
+
+    @Test
+    @DisplayName("예상 못한 예외만 status=ERROR 로 남겨 알람 대상이 된다")
+    fun unexpectedExceptionsAreError() {
+        val end = captureEndLine { throw RuntimeException("DB down") }
+        assertTrue(end.formattedMessage.contains("status=ERROR"), end.formattedMessage)
+        assertTrue(end.level == Level.ERROR, end.level.toString())
     }
 
     @Test

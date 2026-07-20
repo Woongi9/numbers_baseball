@@ -60,7 +60,14 @@ class LogTraceAspect {
             return result
         } catch (e: Throwable) {
             // 예외를 삼키지 않고 재던진다. 관측만 하고 advice 가 사용자 응답을 만든다.
-            status = "ERROR(${e.javaClass.simpleName})"
+            // 자릿수·중복 틀린 추측(IllegalArgumentException), 게임 없음(IllegalStateException)은
+            // advice 가 안내로 처리하는 '정상 유저 흐름' → REJECTED. 진짜 장애만 ERROR 로 남겨
+            // error_count 지표가 서버 에러만 세도록 한다.
+            status = if (e is IllegalArgumentException || e is IllegalStateException) {
+                "REJECTED(${e.javaClass.simpleName})"
+            } else {
+                "ERROR(${e.javaClass.simpleName})"
+            }
             summary = sanitize(e.message ?: "").take(SUMMARY_LEN)
             throw e
         } finally {
@@ -69,9 +76,9 @@ class LogTraceAspect {
             val line = "phase=END botKey=$botKey user=$botUserKey command=$intent " +
                 "status=$status elapsedMs=$elapsedMs slow=$slow result=\"$summary\""
             when {
-                status != "OK" -> log.error(line)
+                status.startsWith("ERROR") -> log.error(line)
                 slow -> log.warn(line)
-                else -> log.info(line)
+                else -> log.info(line)   // OK · REJECTED
             }
             MDC.clear()
         }

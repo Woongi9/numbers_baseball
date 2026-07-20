@@ -76,6 +76,7 @@ class SkillController(
                     buttons = listOf(
                         SkillResponse.Button.mentionPrefill(mentionButtonLabel),
                         SkillResponse.Button.message("포기", "포기"),
+                        SkillResponse.Button.mentionPrefill("제출"),
                     ),
                     fallbackText = text,
                 )
@@ -109,7 +110,12 @@ class SkillController(
                 )
             }
 
-            SkillCommand.HELP -> SkillResponse.text(helpMessage())
+            SkillCommand.HELP -> textCardOrText(
+                title = "📖 숫자야구 사용법",
+                description = helpMessage(),
+                buttons = SkillResponse.Button.guideButtons(),
+                fallbackText = helpMessage(),
+            )
         }
 
     /**
@@ -136,8 +142,8 @@ class SkillController(
                 title = headline,
                 description = body,
                 buttons = listOf(
-                    SkillResponse.Button.message("시작", "시작"),
                     SkillResponse.Button.message("랭킹", "랭킹"),
+                    SkillResponse.Button.message("시작", "시작"),
                 ),
                 fallbackText = "$headline\n$body",
             )
