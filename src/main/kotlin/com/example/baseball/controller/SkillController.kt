@@ -26,6 +26,14 @@ class SkillController(
     // 게임 진행 카드(시작/추측)의 멘션 버튼은 맥락상 "제출"로 고정한다.
     @Value("\${kakao.mention-button-label:멘션}") private val mentionButtonLabel: String,
 ) {
+    /**
+     * 썸네일 캐시버스터. 이미지 파일을 교체하면 이 값을 올린다.
+     * URL이 고정(`start.png`)이면 Cloudflare·카카오 이미지 프록시가 옛 파일을 계속 서빙하므로,
+     * `?v=N`으로 URL을 바꿔 전 캐시 계층을 강제 갱신한다(PLAN STEP 12 "파일명 버저닝" 대체).
+     * ponytail: 전역 버전 1개 — 이미지 하나만 바꿔도 5종 URL이 다 바뀜(재요청). 이미지가 작고 드물게 바뀌어 무해.
+     */
+    private val imageVersion = "2"
+
     /** 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다. */
     private enum class ResultImage(val file: String) {
         START("start.png"),
@@ -180,7 +188,7 @@ class SkillController(
         if (!cardsEnabled) return SkillResponse.text(fallbackText)
         val card = SkillResponse.BasicCard(
             thumbnail = SkillResponse.Thumbnail(
-                imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}",
+                imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}?v=$imageVersion",
                 altText = title.take(SkillResponse.BasicCard.TITLE_MAX),
                 fixedRatio = true, // 이미지가 1:1(800×800)이라 크롭 방지 + 버튼 가로 최대 2개
             ),

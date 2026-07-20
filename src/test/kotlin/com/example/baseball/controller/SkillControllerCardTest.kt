@@ -42,7 +42,7 @@ class SkillControllerCardTest @Autowired constructor(
             status { isOk() }
             jsonPath("$.template.outputs[0].simpleText") { doesNotExist() }
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
-                value("https://img.test/images/start.png")
+                value("https://img.test/images/start.png?v=2")
             }
             // 시작 카드 버튼은 [포기, 제출(멘션 프리필)] 순이다(제출을 우측에 둔다).
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
@@ -69,7 +69,7 @@ class SkillControllerCardTest @Autowired constructor(
         }.andExpect {
             status { isOk() }
             jsonPath("$.template.outputs[0].basicCard.thumbnail.imageUrl") {
-                value("https://img.test/images/answer.png")
+                value("https://img.test/images/answer.png?v=2")
             }
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].messageText") { value("랭킹") }
