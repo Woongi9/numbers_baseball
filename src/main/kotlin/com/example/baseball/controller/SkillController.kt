@@ -22,8 +22,9 @@ class SkillController(
     // 썸네일 이미지 베이스 URL. 비어 있으면(로컬/테스트 기본값) BasicCard 대신 simpleText로 폴백한다.
     // prod에서만 실제 URL(https://numbers-baseball.com/images)을 주입해 카드로 노출한다.
     @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
-    // 멘션 프리필 버튼 라벨. 환경별로 다르게 노출한다(dev: 테스트용 문구, prod: 안내 문구).
-    @Value("\${kakao.mention-button-label:제출}") private val mentionButtonLabel: String,
+    // 안내(도움말/예외) 응답의 멘션 버튼 라벨. 환경별로 다르게 노출한다(dev: 테스트용 문구, prod: 안내 문구).
+    // 게임 진행 카드(시작/추측)의 멘션 버튼은 맥락상 "제출"로 고정한다.
+    @Value("\${kakao.mention-button-label:멘션}") private val mentionButtonLabel: String,
 ) {
     /** 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다. */
     private enum class ResultImage(val file: String) {
@@ -75,7 +76,7 @@ class SkillController(
                     description = text,
                     buttons = listOf(
                         SkillResponse.Button.message("포기", "포기"),
-                        SkillResponse.Button.mentionPrefill(mentionButtonLabel),
+                        SkillResponse.Button.mentionPrefill("제출"),
                     ),
                     fallbackText = text,
                 )
@@ -112,7 +113,7 @@ class SkillController(
             SkillCommand.HELP -> textCardOrText(
                 title = "📖 숫자야구 사용법",
                 description = helpMessage(),
-                buttons = SkillResponse.Button.guideButtons(),
+                buttons = SkillResponse.Button.guideButtons(mentionButtonLabel),
                 fallbackText = helpMessage(),
             )
         }
@@ -159,7 +160,7 @@ class SkillController(
             description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
             // 오픈채팅에선 message 버튼 클릭 시 "@봇 "이 입력창에 프리필된다(즉시 전송 아님).
             // messageText를 빈 값으로 두어 멘션만 깔끔히 채워지도록 한다(실제 프리필 내용은 오픈채팅 테스트로 확인).
-            buttons = listOf(SkillResponse.Button.mentionPrefill(mentionButtonLabel)),
+            buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
             // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
             fallbackText = "${outcome.tries}번째 시도: $sb",
         )
