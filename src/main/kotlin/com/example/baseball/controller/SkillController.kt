@@ -32,11 +32,15 @@ class SkillController(
      * `?v=N`으로 URL을 바꿔 전 캐시 계층을 강제 갱신한다(PLAN STEP 12 "파일명 버저닝" 대체).
      * ponytail: 전역 버전 1개 — 이미지 하나만 바꿔도 5종 URL이 다 바뀜(재요청). 이미지가 작고 드물게 바뀌어 무해.
      */
-    private val imageVersion = "2"
+    private val imageVersion = "3"
 
-    /** 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다. */
-    private enum class ResultImage(val file: String) {
-        START("start.png"),
+    /**
+     * 결과 상태별 썸네일 파일명(확장자 포함). static/images/ 아래 실제 파일명과 일치해야 한다.
+     * wideRatio=true 면 2:1(800×400, fixedRatio=false)로 노출 — 세로 공간을 줄인다(피드백 ①B).
+     * false 면 1:1(800×400 아님, 800×800, fixedRatio=true)로 크롭 없이 정사각 노출.
+     */
+    private enum class ResultImage(val file: String, val wideRatio: Boolean = false) {
+        START("start.png", wideRatio = true), // 2:1 배너형(세로폭 축소)
         STRIKE("strike.png"), // 스트라이크 1개 이상
         BALL("ball.png"),     // 스트라이크 0 + 볼 1개 이상
         OUT("out.png"),       // 0S 0B
@@ -190,7 +194,8 @@ class SkillController(
             thumbnail = SkillResponse.Thumbnail(
                 imageUrl = "${imageBaseUrl.trimEnd('/')}/${image.file}?v=$imageVersion",
                 altText = title.take(SkillResponse.BasicCard.TITLE_MAX),
-                fixedRatio = true, // 이미지가 1:1(800×800)이라 크롭 방지 + 버튼 가로 최대 2개
+                // 1:1 이미지는 fixedRatio=true(크롭 방지). 2:1 배너(START)는 false로 네이티브 2:1 노출.
+                fixedRatio = !image.wideRatio,
             ),
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.BasicCard.DESC_MAX),
