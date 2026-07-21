@@ -194,6 +194,8 @@ class SkillController(
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.BasicCard.DESC_MAX),
             buttons = buttons.ifEmpty { null },
+            // 버튼 2개를 한 줄에 가로로 노출한다(카카오 기본은 세로).
+            buttonLayout = if (buttons.isEmpty()) null else "horizontal",
         )
         return SkillResponse.card(card)
     }
@@ -213,6 +215,8 @@ class SkillController(
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.TextCard.DESC_MAX),
             buttons = buttons.ifEmpty { null },
+            // 버튼 2개를 한 줄에 가로로 노출한다(카카오 기본은 세로).
+            buttonLayout = if (buttons.isEmpty()) null else "horizontal",
         )
         return SkillResponse.textCard(card)
     }

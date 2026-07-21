@@ -46,6 +46,8 @@ class SkillControllerCardTest @Autowired constructor(
             }
             // 시작 이미지는 2:1 배너 → fixedRatio=false(네이티브 2:1, 크롭 없음)
             jsonPath("$.template.outputs[0].basicCard.thumbnail.fixedRatio") { value(false) }
+            // 버튼은 한 줄에 가로 정렬(2개)로 노출한다.
+            jsonPath("$.template.outputs[0].basicCard.buttonLayout") { value("horizontal") }
             // 시작 카드 버튼은 [포기, 제출(멘션 프리필)] 순이다(제출을 우측에 둔다).
             jsonPath("$.template.outputs[0].basicCard.buttons.length()") { value(2) }
             jsonPath("$.template.outputs[0].basicCard.buttons[0].label") { value("포기") }

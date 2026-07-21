@@ -61,6 +61,8 @@ data class SkillResponse(
         val title: String? = null,
         val description: String? = null,
         val buttons: List<Button>? = null,
+        // "horizontal"이면 버튼을 가로로 정렬(한 줄 최대 2개), "vertical"이면 세로(최대 5개). null이면 카카오 기본(vertical).
+        val buttonLayout: String? = null,
     ) {
         init {
             require(title != null || description != null) { "title/description 중 최소 하나는 필요합니다." }
@@ -85,6 +87,8 @@ data class SkillResponse(
         val title: String? = null,
         val description: String? = null,
         val buttons: List<Button>? = null,
+        // "horizontal"이면 버튼을 가로로 정렬(한 줄 최대 2개), "vertical"이면 세로(최대 5개). null이면 카카오 기본(vertical).
+        val buttonLayout: String? = null,
     ) {
         init {
             title?.let {
