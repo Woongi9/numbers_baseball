@@ -43,8 +43,6 @@ class SkillExceptionHandler(
             SkillResponse.TextCard(
                 description = message.take(SkillResponse.TextCard.DESC_MAX),
                 buttons = SkillResponse.Button.guideButtons(mentionButtonLabel),
-                // 버튼 2개를 한 줄에 가로로 노출한다(카카오 기본은 세로).
-                buttonLayout = "horizontal",
             ),
         )
     }

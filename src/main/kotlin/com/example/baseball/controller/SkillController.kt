@@ -89,6 +89,8 @@ class SkillController(
                         SkillResponse.Button.mentionPrefill("제출"),
                     ),
                     fallbackText = text,
+                    // 새 게임 시작 카드만 [포기, 제출]을 한 줄에 가로로 노출한다.
+                    buttonLayout = "horizontal",
                 )
             }
 
@@ -182,6 +184,8 @@ class SkillController(
         description: String,
         buttons: List<SkillResponse.Button>,
         fallbackText: String,
+        // "horizontal"이면 버튼을 한 줄에 가로로 노출한다(기본 null=카카오 기본 세로).
+        buttonLayout: String? = null,
     ): SkillResponse {
         if (!cardsEnabled) return SkillResponse.text(fallbackText)
         val card = SkillResponse.BasicCard(
@@ -194,8 +198,7 @@ class SkillController(
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.BasicCard.DESC_MAX),
             buttons = buttons.ifEmpty { null },
-            // 버튼 2개를 한 줄에 가로로 노출한다(카카오 기본은 세로).
-            buttonLayout = if (buttons.isEmpty()) null else "horizontal",
+            buttonLayout = buttonLayout,
         )
         return SkillResponse.card(card)
     }
@@ -215,8 +218,6 @@ class SkillController(
             title = title.take(SkillResponse.BasicCard.TITLE_MAX),
             description = description.take(SkillResponse.TextCard.DESC_MAX),
             buttons = buttons.ifEmpty { null },
-            // 버튼 2개를 한 줄에 가로로 노출한다(카카오 기본은 세로).
-            buttonLayout = if (buttons.isEmpty()) null else "horizontal",
         )
         return SkillResponse.textCard(card)
     }
