@@ -264,10 +264,9 @@ class SkillController(
     }
 
     /**
-     * 게임 규칙: 규칙 요약 + 명령어 안내(6-E ③ 통합). 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다.
+     * 게임 규칙: STRIKE/BALL/OUT 규칙 요약. 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다.
      * BaseballJudge 판정과 문구를 일치시킨다: STRIKE=자리+숫자, BALL=숫자만(자리 다름), OUT=0S 0B.
      * 자릿수는 GameService.DIGITS로 단일화, 예시 숫자는 이해용 고정 값(DIGITS=4 기준).
-     * 명령어는 자명한 부연(예: '시작'=게임 시작)을 빼고 이름만 나열한다(6-E ⑤ 간결화).
      */
     private fun helpMessage(): String {
         val n = GameService.DIGITS
@@ -277,8 +276,6 @@ class SkillController(
             - BALL : 숫자만 맞고 자리 틀림
             - OUT : 맞는 숫자 없음 (0S 0B)
             예) 정답 1234 · 추측 1325 → 1S 2B
-
-            [명령어] 시작 · 포기 · 랭킹 · 숫자 입력(추측)
         """.trimIndent()
     }
 }
