@@ -34,7 +34,7 @@ class SkillExceptionHandler(
         guide(e.message ?: "입력이 올바르지 않습니다.")
 
     /**
-     * 안내 메시지를 [멘션·도움말] 버튼과 함께 TextCard로 응답한다.
+     * 안내 메시지를 [멘션·게임 규칙] 버튼과 함께 TextCard로 응답한다.
      * 카드 미설정(테스트/기본) 환경에선 버튼 없는 simpleText로 폴백한다.
      */
     private fun guide(message: String): SkillResponse {

@@ -44,17 +44,9 @@ class SkillCommandTest {
     }
 
     @Test
-    @DisplayName("규칙 계열 단어 → RULES")
-    fun rules() {
-        listOf("게임규칙", "게임 규칙", "규칙").forEach {
-            assertEquals(SkillCommand.RULES, SkillCommand.classify(it))
-        }
-    }
-
-    @Test
-    @DisplayName("사용법 계열 단어 → HELP")
+    @DisplayName("규칙·사용법 계열 단어 → HELP ('게임 규칙'으로 통합, '도움말'은 카카오 예약 발화라 제외)")
     fun helpWords() {
-        listOf("사용법", "도움말").forEach {
+        listOf("게임규칙", "게임 규칙", "규칙", "사용법").forEach {
             assertEquals(SkillCommand.HELP, SkillCommand.classify(it))
         }
     }

@@ -118,19 +118,23 @@ class SkillControllerCardTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("게임 규칙 응답은 썸네일 없는 textCard + '시작' 버튼이다")
-    fun rulesReturnsTextCardWithStart() {
+    @DisplayName("게임 규칙 응답은 썸네일 없는 textCard(규칙 요약+명령어) + [시작, 멘션] 버튼이다")
+    fun helpReturnsMergedTextCard() {
+        // 규칙·사용법 발화가 하나의 "게임 규칙" 응답으로 통합됐다(6-E ③).
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
-            content = body("게임 규칙", "card-rules")
+            content = body("게임 규칙", "card-help")
         }.andExpect {
             status { isOk() }
             jsonPath("$.template.outputs[0].basicCard") { doesNotExist() } // 썸네일 없음
-            jsonPath("$.template.outputs[0].textCard.title") { value("⚾ 숫자야구 규칙") }
+            jsonPath("$.template.outputs[0].textCard.title") { value("📕 숫자야구 게임 규칙") }
             jsonPath("$.template.outputs[0].textCard.description") { value(org.hamcrest.Matchers.containsString("STRIKE")) }
-            jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(1) }
+            jsonPath("$.template.outputs[0].textCard.description") { value(org.hamcrest.Matchers.containsString("명령어")) }
+            jsonPath("$.template.outputs[0].textCard.buttons.length()") { value(2) }
             jsonPath("$.template.outputs[0].textCard.buttons[0].label") { value("시작") }
             jsonPath("$.template.outputs[0].textCard.buttons[0].messageText") { value("시작") }
+            jsonPath("$.template.outputs[0].textCard.buttons[1].label") { value("@테스트봇에게 말하기") }
+            jsonPath("$.template.outputs[0].textCard.buttons[1].action") { value("mention") }
         }
     }
 

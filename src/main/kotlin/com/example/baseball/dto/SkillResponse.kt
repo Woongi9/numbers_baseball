@@ -153,9 +153,12 @@ data class SkillResponse(
             fun mentionPrefill(label: String): Button =
                 Button(label = label, action = "mention")
 
-            /** 안내/막다른 응답 공용 버튼: 멘션(오픈채팅 프리필) + 도움말 재발화. */
+            /**
+             * 안내/막다른 응답 공용 버튼: 멘션(오픈채팅 프리필) + 게임 규칙 재발화.
+             * "도움말"은 카카오 기본 블록(예약)이라 재발화 문구로 쓰지 않고 "게임 규칙"(스킬 카드로 라우팅)을 쓴다.
+             */
             fun guideButtons(mentionLabel: String = "멘션"): List<Button> =
-                listOf(mentionPrefill(mentionLabel), message("도움말", "도움말"))
+                listOf(mentionPrefill(mentionLabel), message("게임 규칙", "게임 규칙"))
         }
     }
 

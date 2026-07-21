@@ -22,7 +22,7 @@ class SkillController(
     // 썸네일 이미지 베이스 URL. 비어 있으면(로컬/테스트 기본값) BasicCard 대신 simpleText로 폴백한다.
     // prod에서만 실제 URL(https://numbers-baseball.com/images)을 주입해 카드로 노출한다.
     @Value("\${kakao.image-base-url:}") private val imageBaseUrl: String,
-    // 안내(도움말/예외) 응답의 멘션 버튼 라벨. 환경별로 다르게 노출한다(dev: 테스트용 문구, prod: 안내 문구).
+    // 안내(게임 규칙/예외) 응답의 멘션 버튼 라벨. 환경별로 다르게 노출한다(dev: 테스트용 문구, prod: 안내 문구).
     // 게임 진행 카드(시작/추측)의 멘션 버튼은 맥락상 "제출"로 고정한다.
     @Value("\${kakao.mention-button-label:멘션}") private val mentionButtonLabel: String,
 ) {
@@ -56,7 +56,7 @@ class SkillController(
      */
     @Operation(
         summary = "발화 처리",
-        description = "utterance 에 '시작'/'새게임' → 새 게임, 서로 다른 숫자 → 추측, '포기' → 정답 공개. 그 외엔 도움말.",
+        description = "utterance 에 '시작'/'새게임' → 새 게임, 서로 다른 숫자 → 추측, '포기' → 정답 공개. 그 외엔 게임 규칙.",
     )
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
@@ -73,7 +73,7 @@ class SkillController(
      * 입력 규칙 위반·진행중 게임 없음 등은 예외로 던지고, SkillExceptionHandler 가 안내 메시지로 변환한다.
      * (예외를 여기서 삼키지 않아야 LogTraceAspect 가 실패를 관측할 수 있다 — 9-F 증상 4)
      *
-     * 카드 전환 범위: START(시작)·승리·GIVEUP(포기)은 BasicCard(썸네일), 진행중 추측·RULES/HELP은 TextCard(썸네일 없음), RANKING은 simpleText.
+     * 카드 전환 범위: START(시작)·승리·GIVEUP(포기)은 BasicCard(썸네일), 진행중 추측·HELP(게임 규칙)은 TextCard(썸네일 없음), RANKING은 simpleText.
      */
     private fun handle(userId: String, botKey: String?, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
@@ -110,22 +110,19 @@ class SkillController(
 
             SkillCommand.GUESS -> formatGuess(gameService.guess(userId, botKey, utterance))
 
-            SkillCommand.RULES -> {
-                val body = rulesBody()
+            SkillCommand.HELP -> {
+                val body = helpMessage()
                 textCardOrText(
-                    title = "⚾ 숫자야구 규칙",
+                    // "도움말"은 카카오 기본 블록(예약)이라 우리 카드 표기·발화엔 쓰지 않는다. 표기는 "게임 규칙"으로 통일한다.
+                    title = "📕 숫자야구 게임 규칙",
                     description = body,
-                    buttons = listOf(SkillResponse.Button.message("시작", "시작")),
-                    fallbackText = "[숫자야구 규칙]\n$body",
+                    buttons = listOf(
+                        SkillResponse.Button.message("시작", "시작"),
+                        SkillResponse.Button.mentionPrefill(mentionButtonLabel),
+                    ),
+                    fallbackText = body,
                 )
             }
-
-            SkillCommand.HELP -> textCardOrText(
-                title = "📖 숫자야구 사용법",
-                description = helpMessage(),
-                buttons = SkillResponse.Button.guideButtons(mentionButtonLabel),
-                fallbackText = helpMessage(),
-            )
         }
 
     /**
@@ -266,34 +263,22 @@ class SkillController(
         return SkillResponse.textWithMentions(text, mentions)
     }
 
-    /** 사용법: 명령어 안내. 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다. */
-    private fun helpMessage(): String =
-        """
-        숫자야구 사용법입니다.
-        - '시작' : 새 게임 시작
-        - 서로 다른 숫자 입력 : 추측 (예: 1234)
-        - '포기' : 정답 공개
-        - '랭킹' : 이 채팅방 점수 순위
-        - '게임 규칙' : 게임 방법 설명
-        """.trimIndent()
-
     /**
-     * 게임 규칙 본문: 승패 판정(STRIKE/BALL/OUT) 설명. 자릿수는 GameService.DIGITS로 단일화.
+     * 게임 규칙: 규칙 요약 + 명령어 안내(6-E ③ 통합). 알 수 없는 발화(HELP fallback)도 이 메시지로 안내한다.
      * BaseballJudge 판정과 문구를 일치시킨다: STRIKE=자리+숫자, BALL=숫자만(자리 다름), OUT=0S 0B.
-     * 예시 숫자는 이해를 돕기 위한 고정 값(DIGITS=4 기준)이다.
-     * 헤더("[숫자야구 규칙]")는 카드에선 title로 분리되므로 본문에는 넣지 않는다(simpleText 폴백에서만 앞에 붙인다).
+     * 자릿수는 GameService.DIGITS로 단일화, 예시 숫자는 이해용 고정 값(DIGITS=4 기준).
+     * 명령어는 자명한 부연(예: '시작'=게임 시작)을 빼고 이름만 나열한다(6-E ⑤ 간결화).
      */
-    private fun rulesBody(): String {
+    private fun helpMessage(): String {
         val n = GameService.DIGITS
         return """
-            서로 다른 ${n}자리 숫자(중복 없이)를 맞히는 게임입니다.
-            - STRIKE : 숫자와 자리 모두 일치
-            - BALL : 숫자는 있지만 자리가 다름
-            - OUT : 맞는 숫자가 하나도 없음 (0S 0B)
+            서로 다른 ${n}자리 숫자를 맞혀요.
+            - STRIKE : 숫자·자리 모두 일치
+            - BALL : 숫자만 맞고 자리 틀림
+            - OUT : 맞는 숫자 없음 (0S 0B)
+            예) 정답 1234 · 추측 1325 → 1S 2B
 
-            예) 정답 1234 / 추측 1325 → 1S 2B
-            ${n}S가 되면 승리!
-            '시작'으로 도전하세요.
+            [명령어] 시작 · 포기 · 랭킹 · 숫자 입력(추측)
         """.trimIndent()
     }
 }
