@@ -238,7 +238,7 @@ class SkillController(
      */
     private fun percentileLine(p: Percentile): String {
         val badge = RankTitle.of(p.topPercent)?.let { "${it.emoji} ${it.label} · " } ?: "🏅 "
-        return "${badge}\n이번 시즌 상위 ${p.topPercent}% (${p.rank}위 / ${p.total}명)"
+        return "${badge}\n이번 시즌 상위 ${p.topPercent}%"
     }
 
     /**
