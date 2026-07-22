@@ -1,6 +1,7 @@
 package com.example.baseball.domain.game
 
 import org.springframework.data.jpa.repository.JpaRepository
+import java.util.Optional
 
 interface GameRepository : JpaRepository<Game, Long> {
 

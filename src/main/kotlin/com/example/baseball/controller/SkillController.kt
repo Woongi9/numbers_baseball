@@ -61,7 +61,7 @@ class SkillController(
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val appUserId = request.userRequest.user.id
-        val botKey = request.userRequest.chat?.properties?.botGroupKey
+        val botKey = request.userRequest.chat.properties.botGroupKey
         // 멘션 프리필 버튼이 심는 제로폭 공백(U+200B 등)을 제거한 뒤 판정한다.
         // 이게 남으면 "​1234"가 숫자 판정(all isDigit)을 통과하지 못해 추측이 먹히지 않는다.
         val utterance = request.userRequest.utterance.replace(zeroWidthChars, "").trim()
@@ -75,7 +75,7 @@ class SkillController(
      *
      * 카드 전환 범위: START(시작)·승리·GIVEUP(포기)은 BasicCard(썸네일), 진행중 추측·HELP(게임 규칙)은 TextCard(썸네일 없음), RANKING은 simpleText.
      */
-    private fun handle(appUserId: String, botKey: String?, utterance: String): SkillResponse =
+    private fun handle(appUserId: String, botKey: String, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
             SkillCommand.START -> {
                 gameService.startGame(appUserId, botKey)
@@ -95,7 +95,7 @@ class SkillController(
             }
 
             SkillCommand.GIVEUP -> {
-                val answer = gameService.giveUp(appUserId)
+                val answer = gameService.giveUp(appUserId, botKey)
                 cardOrText(
                     image = ResultImage.GIVEUP,
                     title = "🏳️ 게임 포기",

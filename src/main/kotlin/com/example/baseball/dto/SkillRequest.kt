@@ -18,7 +18,7 @@ data class SkillRequest(
         val user: User,
         // 그룹 챗봇 페이로드의 chat. chat.properties.botGroupKey 가 채팅방(그룹) 식별자.
         // 개인 챗봇·일부 요청/테스트에는 없을 수 있어 nullable.
-        val chat: Chat? = null,
+        val chat: Chat,
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -29,13 +29,13 @@ data class SkillRequest(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class Chat(
-        val properties: Properties? = null,
+        val properties: Properties,
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class Properties(
         // 그룹 챗봇 채팅방(그룹) 식별자. 내부적으로 botKey 로 사용해 랭킹을 그룹 단위로 묶는다.
         @field:Schema(description = "그룹 챗봇 채팅방 ID = botKey", example = "test-bot-001")
-        val botGroupKey: String? = null,
+        val botGroupKey: String,
     )
 }

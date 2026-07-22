@@ -34,7 +34,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     /** /skill/play 호출 후 simpleText.text 가 expected 를 포함하는지 검증 */
-    private fun play(utterance: String, userId: String, expectedText: String, botKey: String? = null) {
+    private fun play(utterance: String, userId: String, expectedText: String, botKey: String? = "bot-1") {
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
             content = body(utterance, userId, botKey)

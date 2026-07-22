@@ -4,6 +4,8 @@ import com.example.baseball.domain.game.Game
 import com.example.baseball.domain.game.GameDifficulty
 import com.example.baseball.domain.game.GameRepository
 import com.example.baseball.domain.game.GameStatus
+import com.example.baseball.domain.user.BotUser
+import com.example.baseball.domain.user.User
 import io.mockk.CapturingSlot
 import io.mockk.every
 import io.mockk.mockk
@@ -27,7 +29,14 @@ class GameServiceTest {
     private val userService = mockk<UserService>(relaxed = true)
     private val sut = GameService(gameRepository, userService)
 
-    private val botKey = "u1"
+    private val botKey = "bot-1"
+
+    private fun botUser(botUserKey: String, score: Int): BotUser =
+        BotUser(
+            user = User(appUserId = "app-$botUserKey").apply { this.score = score },
+            botUserKey = botUserKey,
+            botKey = botKey,
+        )
 
     /** save(game)가 들어온 엔티티를 그대로 반환하도록 설정 + 캡처 */
     private fun captureSave(): CapturingSlot<Game> {
@@ -64,7 +73,8 @@ class GameServiceTest {
             noPlayingGame()
             val slot = captureSave()
 
-            val returned = sut.startGame(botKey, gameDifficulty = GameDifficulty.NORMAL)
+            val botUser = botUser("botUserKey", 0)
+            val returned = sut.startGame(appUserId = botUser.user.appUserId, botKey =  botKey, gameDifficulty = GameDifficulty.NORMAL)
 
             val saved = slot.captured
             assertEquals(returned, saved)                          // 저장한 엔티티를 그대로 반환
@@ -93,23 +103,13 @@ class GameServiceTest {
         }
 
         @Test
-        @DisplayName("botKey 가 없으면 register 에 null 을 넘겨 전역 User 만 보장한다")
-        fun registersGlobalOnlyWhenNoBotKey() {
-            noPlayingGame()
-            captureSave()
-
-            sut.startGame(appUserId = "u1")
-
-            verify(exactly = 1) { userService.register("u1", null, "u1") }
-        }
-
-        @Test
         @DisplayName("HARD: 0~9+a~e 기호 4자리·score=200 게임을 저장한다")
         fun createsHardGame() {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(botKey, gameDifficulty = GameDifficulty.HARD)
+            val botUser = botUser("botUserKey", 0)
+            sut.startGame(appUserId = botUser.user.appUserId, botKey =  botKey, gameDifficulty = GameDifficulty.HARD)
 
             val saved = slot.captured
             assertEquals(GameDifficulty.HARD, saved.gameDifficulty)
@@ -128,7 +128,8 @@ class GameServiceTest {
             noPlayingGame()
             val slot = captureSave()
 
-            sut.startGame(botKey, gameDifficulty = GameDifficulty.EASY)
+            val botUser = botUser("botUserKey", 0)
+            sut.startGame(appUserId = botUser.user.appUserId, botKey, gameDifficulty = GameDifficulty.EASY)
 
             val saved = slot.captured
             assertEquals(GameDifficulty.EASY, saved.gameDifficulty)
@@ -146,7 +147,8 @@ class GameServiceTest {
             val existing = playingGame("1234")
             val slot = captureSave()
 
-            sut.startGame(botKey, gameDifficulty = GameDifficulty.NORMAL)
+            val botUser = botUser("botUserKey", 0)
+            sut.startGame(botUser.user.appUserId, botKey, gameDifficulty = GameDifficulty.NORMAL)
 
             val saved = slot.captured
             assertEquals(GameStatus.GIVEUP, existing.status)       // 기존 게임 종료
@@ -238,7 +240,8 @@ class GameServiceTest {
         fun giveUpReturnsAnswer() {
             val game = playingGame("5273")
 
-            val answer = sut.giveUp(botKey)
+            val botUser = botUser("botUserKey", 0)
+            val answer = sut.giveUp(appUserId = botUser.user.appUserId, botKey)
 
             assertEquals("5273", answer)
             assertEquals(GameStatus.GIVEUP, game.status)
@@ -249,7 +252,8 @@ class GameServiceTest {
         fun noGameThrows() {
             noPlayingGame()
             assertThrows(IllegalStateException::class.java) {
-                sut.giveUp(botKey)
+                val botUser = botUser("botUserKey", 0)
+                sut.giveUp(appUserId =  botUser.user.appUserId, botKey)
             }
         }
     }

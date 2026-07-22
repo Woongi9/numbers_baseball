@@ -43,14 +43,15 @@ class GameService(
     @Transactional
     fun startGame(
         appUserId: String,
-        botKey: String? = null,
+        botKey: String,
         gameDifficulty: GameDifficulty = GameDifficulty.NORMAL,
     ): Game {
         userService.register(appUserId = appUserId, botKey = botKey, botUserKey = appUserId)
-        gameRepository.findFirstByBotKeyAndStatus(appUserId, GameStatus.PLAYING)?.giveUp()
+        gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)?.giveUp()
+
         val answer = generateAnswer(gameDifficulty)
         return gameRepository.save(
-            Game(botKey = appUserId, answer = answer, gameDifficulty = gameDifficulty)
+            Game(botKey = botKey, answer = answer, gameDifficulty = gameDifficulty)
         )
     }
 
@@ -64,8 +65,8 @@ class GameService(
      * @throws IllegalArgumentException 입력이 규칙에 맞지 않을 때(BaseballJudge가 검증)
      */
     @Transactional
-    fun guess(appUserId: String, botKey: String?, guess: String): GuessOutcome {
-        val game = currentGame(appUserId)
+    fun guess(appUserId: String, botKey: String, guess: String): GuessOutcome {
+        val game = currentGame(botKey)
 
         // 검증 실패 시 여기서 예외 → 시도 횟수는 증가하지 않는다(잘못된 입력은 차감 안 함).
         val result = BaseballJudge.judge(game.answer, guess)
@@ -92,14 +93,14 @@ class GameService(
 
     /** 포기. 정답을 반환한다. */
     @Transactional
-    fun giveUp(appUserId: String): String {
-        val game = currentGame(appUserId)
+    fun giveUp(appUserId: String, botKey: String): String {
+        val game = currentGame(botKey)
         game.giveUp()
         return game.answer
     }
 
-    private fun currentGame(appUserId: String): Game =
-        gameRepository.findFirstByBotKeyAndStatus(appUserId, GameStatus.PLAYING)
+    private fun currentGame(botKey: String): Game =
+        gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)
             ?: throw IllegalStateException("진행 중인 게임이 없습니다. '시작'을 입력해 새 게임을 시작하세요.")
 
     private fun generateAnswer(gameDifficulty: GameDifficulty): String {
