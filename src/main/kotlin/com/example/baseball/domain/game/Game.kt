@@ -16,7 +16,7 @@ import java.time.LocalDateTime
  *
  * - 상태 전이(승리/포기)는 외부에서 status를 직접 바꾸지 않고 도메인 메서드로만 수행한다.
  *   → 항상 finishedAt이 함께 채워져 데이터 정합성이 깨지지 않는다.
- * - (userId, status) 복합 인덱스: 매 요청마다 "이 유저의 PLAYING 게임" 조회가 일어나므로 필수.
+ * - (bot_key, status) 복합 인덱스: bot_key 컬럼엔 appUserId 값이 들어간다(게임은 유저 단위 스코프 — 이름과 달리 채팅방 키가 아님). 매 요청마다 "이 유저의 PLAYING 게임" 조회가 일어나므로 필수.
  */
 @Entity
 @Table(

@@ -37,20 +37,20 @@ class GameService(
      * 시작 시점에 참가자(User/BotUser) 행을 미리 보장한다(PLAN 9-F 증상 2):
      * 승리해야만 행이 생기던 문제를 막아, 점수 없는 참여자도 추적된다.
      *
-     * @param userId 카카오 user.id. 게임 세션 키이자 전역 식별자(appUserId)·봇 내 식별자(botUserKey)로 함께 쓴다.
+     * @param appUserId 카카오 user.id. 전역 식별자이자 게임 세션 키이며, 봇 내 식별자(botUserKey)로도 함께 쓴다.
      * @param botKey 봇(채팅방) 식별자. null 이면 채팅방용 BotUser 등록은 생략하고 전역 User 만 보장한다.
      */
     @Transactional
     fun startGame(
-        userId: String,
+        appUserId: String,
         botKey: String? = null,
         gameDifficulty: GameDifficulty = GameDifficulty.NORMAL,
     ): Game {
-        userService.register(appUserId = userId, botKey = botKey, botUserKey = userId)
-        gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)?.giveUp()
+        userService.register(appUserId = appUserId, botKey = botKey, botUserKey = appUserId)
+        gameRepository.findFirstByBotKeyAndStatus(appUserId, GameStatus.PLAYING)?.giveUp()
         val answer = generateAnswer(gameDifficulty)
         return gameRepository.save(
-            Game(botKey = userId, answer = answer, gameDifficulty = gameDifficulty)
+            Game(botKey = appUserId, answer = answer, gameDifficulty = gameDifficulty)
         )
     }
 
@@ -58,14 +58,14 @@ class GameService(
      * 추측 처리. 진행 중 게임을 찾아 판정하고 상태를 갱신한다.
      * 승리 시 같은 트랜잭션에서 score 를 산정·적립하여 게임 종료와 점수 적립을 원자적으로 커밋한다.
      *
-     * @param userId  카카오 user.id. 게임 세션 키이자 전역 식별자(appUserId)·봇 내 식별자(botUserKey)로 함께 쓴다.
+     * @param appUserId  카카오 user.id. 전역 식별자이자 게임 세션 키이며, 봇 내 식별자(botUserKey)로도 함께 쓴다.
      * @param botKey  봇(채팅방) 식별자. null 이면 채팅방 랭킹용 BotUser 적립은 생략하고 전역 점수만 적립한다.
      * @throws IllegalStateException 진행 중인 게임이 없을 때
      * @throws IllegalArgumentException 입력이 규칙에 맞지 않을 때(BaseballJudge가 검증)
      */
     @Transactional
-    fun guess(userId: String, botKey: String?, guess: String): GuessOutcome {
-        val game = currentGame(userId)
+    fun guess(appUserId: String, botKey: String?, guess: String): GuessOutcome {
+        val game = currentGame(appUserId)
 
         // 검증 실패 시 여기서 예외 → 시도 횟수는 증가하지 않는다(잘못된 입력은 차감 안 함).
         val result = BaseballJudge.judge(game.answer, guess)
@@ -80,7 +80,7 @@ class GameService(
         game.win()
         val gain = ScoreCalculator.gain(game.tries, game.gameDifficulty)
         val totalScore = userService.accrue(
-            appUserId = userId, botKey = botKey, botUserKey = userId, gain = gain,
+            appUserId = appUserId, botKey = botKey, botUserKey = appUserId, gain = gain,
         )
         val percentile = userService.percentileOf(totalScore) // 적립 후 점수 기준
         return GuessOutcome(
@@ -92,14 +92,14 @@ class GameService(
 
     /** 포기. 정답을 반환한다. */
     @Transactional
-    fun giveUp(userId: String): String {
-        val game = currentGame(userId)
+    fun giveUp(appUserId: String): String {
+        val game = currentGame(appUserId)
         game.giveUp()
         return game.answer
     }
 
-    private fun currentGame(userId: String): Game =
-        gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
+    private fun currentGame(appUserId: String): Game =
+        gameRepository.findFirstByBotKeyAndStatus(appUserId, GameStatus.PLAYING)
             ?: throw IllegalStateException("진행 중인 게임이 없습니다. '시작'을 입력해 새 게임을 시작하세요.")
 
     private fun generateAnswer(gameDifficulty: GameDifficulty): String {

@@ -86,7 +86,7 @@ class GameServiceTest {
             noPlayingGame()
             captureSave()
 
-            sut.startGame(userId = "u1", botKey = "bot-1")
+            sut.startGame(appUserId = "u1", botKey = "bot-1")
 
             // userId 를 appUserId·botUserKey 로 함께 전달해 행만 보장(점수 변동 없음).
             verify(exactly = 1) { userService.register("u1", "bot-1", "u1") }
@@ -98,7 +98,7 @@ class GameServiceTest {
             noPlayingGame()
             captureSave()
 
-            sut.startGame(userId = "u1")
+            sut.startGame(appUserId = "u1")
 
             verify(exactly = 1) { userService.register("u1", null, "u1") }
         }
@@ -181,7 +181,7 @@ class GameServiceTest {
             every { userService.accrue("u1", "bot-1", "u1", 95) } returns 1095
             every { userService.percentileOf(1095) } returns Percentile(rank = 5, total = 100, topPercent = 5)
 
-            val outcome = sut.guess(userId = "u1", botKey = "bot-1", guess = "5273")
+            val outcome = sut.guess(appUserId = "u1", botKey = "bot-1", guess = "5273")
 
             assertEquals(95, outcome.gain)
             assertEquals(1095, outcome.totalScore)
