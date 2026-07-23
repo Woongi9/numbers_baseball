@@ -36,6 +36,11 @@ class LogTraceAspect {
 
     @Around("execution(* com.example.baseball.controller.SkillController.play(..))")
     fun trace(joinPoint: ProceedingJoinPoint): Any? {
+        // Generate and register traceId in MDC first: identity resolution can itself emit logs,
+        // which must reference this traceId for correlation.
+        val traceId = UUID.randomUUID().toString().take(TRACE_ID_LEN)
+        MDC.put(TraceKeys.TRACE_ID, traceId)
+
         val request = joinPoint.args.firstOrNull() as? SkillRequest
         val identity = request?.let { ChatIdentity.fromOrNull(it) }
         val botKey = identity?.botKey ?: "-"
@@ -43,8 +48,6 @@ class LogTraceAspect {
         val utterance = request?.userRequest?.utterance?.trim().orEmpty()
         val intent = SkillCommand.classify(utterance).name
 
-        val traceId = UUID.randomUUID().toString().take(TRACE_ID_LEN)
-        MDC.put(TraceKeys.TRACE_ID, traceId)
         MDC.put(TraceKeys.BOT_KEY, botKey)
         MDC.put(TraceKeys.BOT_USER, botUserKey)
 
