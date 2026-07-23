@@ -12,7 +12,7 @@ import jakarta.persistence.*
 )
 class User (
     @Column(name = "app_user_id", nullable = false)
-    val appUserId: String,
+    var appUserId: String,
     ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

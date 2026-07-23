@@ -55,6 +55,7 @@ class UserServiceTest {
         fun createsWhenMissing() {
             val newIdentity = ChatIdentity(appUserId = "app-new", botUserKey = "u1", botKey = "bot-1")
             every { userRepository.findByAppUserId("app-new") } returns null
+            every { userRepository.findByAppUserId("u1") } returns null
             every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns null
             stubSaves()
 
@@ -119,6 +120,7 @@ class UserServiceTest {
         @DisplayName("없으면 User·BotUser 를 score 0 으로 생성한다")
         fun createsBothWhenMissing() {
             every { userRepository.findByAppUserId("app-1") } returns null
+            every { userRepository.findByAppUserId("u1") } returns null
             every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns null
             val savedUser = slot<User>()
             val savedBot = slot<BotUser>()
@@ -174,6 +176,44 @@ class UserServiceTest {
             every { userRepository.count() } returns 1L // 혼자
 
             assertNull(sut.percentileOf(50))
+        }
+    }
+
+    @Nested
+    @DisplayName("appUserId 지연 이관 - 임시 botUserKey 행 개명")
+    inner class LazyMigration {
+
+        @Test
+        @DisplayName("진짜 appUserId 도착 시 임시행(appUserId==botUserKey)을 개명하고 점수를 유지한다")
+        fun renamesTempRowOnRealAppUserId() {
+            // 임시 기간에 botUserKey("u1")로 만들어진 행(점수 700)
+            val temp = User(appUserId = "u1").apply { score = 700 }
+            every { userRepository.findByAppUserId("app-real") } returns null
+            every { userRepository.findByAppUserId("u1") } returns temp
+            val botUser = BotUser(user = temp, botUserKey = "u1", botKey = "bot-1", score = 700)
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
+
+            val realIdentity = ChatIdentity(appUserId = "app-real", botUserKey = "u1", botKey = "bot-1")
+            val total = sut.accrue(realIdentity, gain = 30)
+
+            assertEquals("app-real", temp.appUserId) // 개명됨
+            assertEquals(730, total)                 // 700 유지 + 30
+            verify(exactly = 0) { userRepository.save(any()) } // 새 행 생성 안 함
+        }
+
+        @Test
+        @DisplayName("진짜행이 이미 있으면 이관하지 않고 그 행을 쓴다(중복 방지)")
+        fun usesExistingRealRow() {
+            val real = User(appUserId = "app-real").apply { score = 50 }
+            every { userRepository.findByAppUserId("app-real") } returns real
+            val botUser = BotUser(user = real, botUserKey = "u1", botKey = "bot-1", score = 50)
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
+
+            val realIdentity = ChatIdentity(appUserId = "app-real", botUserKey = "u1", botKey = "bot-1")
+            sut.accrue(realIdentity, gain = 10)
+
+            assertEquals(60, real.score)
+            verify(exactly = 0) { userRepository.findByAppUserId("u1") } // 임시행 탐색 안 함
         }
     }
 }
