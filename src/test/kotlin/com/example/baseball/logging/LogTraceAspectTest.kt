@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.example.baseball.dto.ChatIdentity
+import com.example.baseball.dto.MissingAppUserIdException
 import com.example.baseball.dto.SkillRequest
 import com.example.baseball.dto.SkillResponse
 import io.mockk.every
@@ -94,5 +96,52 @@ class LogTraceAspectTest {
         // 예외 경로에서도 정리되는지 확인
         runCatching { aspect.trace(joinPoint { throw IllegalArgumentException("bad") }) }
         assertNull(MDC.get("traceId"))
+    }
+
+    @Test
+    @DisplayName("식별자 폴백 WARN 은 traceId 가 이미 MDC 에 심어진 뒤에 찍혀야 한다")
+    fun identityFallbackCarriesTraceId() {
+        // botUserKey 만 비워 ChatIdentity.from 내부 fallback("botUserKey", ...) 경로를 태운다.
+        val fallbackRequest = SkillRequest(
+            userRequest = SkillRequest.UserRequest(
+                utterance = "1234",
+                user = SkillRequest.User(
+                    id = "u1",
+                    properties = SkillRequest.UserProperties(appUserId = "app-1", botUserKey = null),
+                ),
+                chat = SkillRequest.Chat(
+                    properties = SkillRequest.ChatProperties(botGroupKey = "bot-1"),
+                ),
+            ),
+        )
+        val jp = mockk<ProceedingJoinPoint>()
+        every { jp.args } returns arrayOf<Any?>(fallbackRequest)
+        every { jp.proceed() } returns SkillResponse.text("ok")
+
+        val logger = LoggerFactory.getLogger(ChatIdentity::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            aspect.trace(jp)
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        val fallbackEvent = appender.list.first { it.formattedMessage.contains("evt=identity_fallback") }
+        assertTrue(fallbackEvent.formattedMessage.contains("field=botUserKey"), fallbackEvent.formattedMessage)
+        val traceId = fallbackEvent.formattedMessage.substringAfter("traceId=").trim()
+        assertTrue(traceId.isNotEmpty() && traceId != "null", fallbackEvent.formattedMessage)
+    }
+
+    @Test
+    @DisplayName("MissingAppUserIdException 은 status=ERROR 로 남고, botKey 는 방 식별자를 유지한다")
+    fun missingAppUserIdIsErrorWithRoomIdentity() {
+        val end = captureEndLine { throw MissingAppUserIdException() }
+        assertTrue(end.formattedMessage.contains("status=ERROR"), end.formattedMessage)
+        assertTrue(end.level == Level.ERROR, end.level.toString())
+        // 기본 request 는 user.properties 가 없어 ChatIdentity.fromOrNull 이 통째로 null 을 돌려주지만,
+        // chat.properties.botGroupKey="bot-1" 은 여전히 남아 있으므로 botKey 는 "-" 로 죽으면 안 된다.
+        assertTrue(!end.formattedMessage.contains("botKey=-"), end.formattedMessage)
+        assertTrue(end.formattedMessage.contains("botKey=bot-1"), end.formattedMessage)
     }
 }
