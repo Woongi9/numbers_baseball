@@ -10,12 +10,14 @@ import jakarta.persistence.*
 @Table(
     name = "season_user_scores",
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_season_user_ym_user", columnNames = ["year_month", "user_id"]),
+        UniqueConstraint(name = "uk_season_user_ym_user", columnNames = ["season_ym", "user_id"]),
     ],
-    indexes = [Index(name = "idx_season_user_ym", columnList = "year_month")],
+    indexes = [Index(name = "idx_season_user_ym", columnList = "season_ym")],
 )
 class SeasonUserScore(
-    @Column(name = "year_month", nullable = false, length = 7)
+    // MySQL 8.0 예약어(YEAR_MONTH interval 단위)라 실제 컬럼명은 year_month 를 피해야 한다.
+    // ddl-auto: validate 인 prod 에서 Hibernate 가 예약어를 자동 이스케이프하지 않아 테이블 생성이 조용히 실패한다.
+    @Column(name = "season_ym", nullable = false, length = 7)
     val yearMonth: String,
 
     @Column(name = "user_id", nullable = false)

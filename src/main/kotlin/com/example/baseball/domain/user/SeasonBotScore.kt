@@ -12,12 +12,14 @@ import jakarta.persistence.*
     uniqueConstraints = [
         // bot_user_key 는 카카오 user.id(방마다 동일 인물은 같은 값)라 bot_key 를 반드시 포함해야 한다.
         // 빼면 한 유저가 두 채팅방에서 score>0 일 때 uniq 충돌로 reset() 트랜잭션이 통째로 롤백된다(BotUser 의 (bot_key, bot_user_key) 유니크와 같은 이유).
-        UniqueConstraint(name = "uk_season_bot_ym_botkey_botuser", columnNames = ["year_month", "bot_key", "bot_user_key"]),
+        UniqueConstraint(name = "uk_season_bot_ym_botkey_botuser", columnNames = ["season_ym", "bot_key", "bot_user_key"]),
     ],
-    indexes = [Index(name = "idx_season_bot_ym_botkey", columnList = "year_month, bot_key")],
+    indexes = [Index(name = "idx_season_bot_ym_botkey", columnList = "season_ym, bot_key")],
 )
 class SeasonBotScore(
-    @Column(name = "year_month", nullable = false, length = 7)
+    // MySQL 8.0 예약어(YEAR_MONTH interval 단위)라 실제 컬럼명은 year_month 를 피해야 한다.
+    // ddl-auto: validate 인 prod 에서 Hibernate 가 예약어를 자동 이스케이프하지 않아 테이블 생성이 조용히 실패한다.
+    @Column(name = "season_ym", nullable = false, length = 7)
     val yearMonth: String,
 
     @Column(name = "bot_key", nullable = false)
