@@ -20,9 +20,10 @@ import java.util.UUID
  * 응답시간(ms) · slow 여부 · 응답 요약. 응답시간은 **finally** 에서 측정해 예외가 나도 남긴다.
  *
  * 동작 순서:
- *  1. 인자(SkillRequest)에서 ChatIdentity 로 botKey/botUserKey 추출, utterance 로 intent 분류.
+ *  1. traceId 생성 → MDC 적재(이 요청 안의 모든 하위 로그가 같은 traceId 로 묶임).
+ *     식별자 해석보다 **먼저** 해야 한다 — 해석이 남기는 폴백 WARN 도 traceId 로 묶여야 하므로.
+ *  2. 인자(SkillRequest)에서 ChatIdentity 로 botKey/botUserKey 추출, utterance 로 intent 분류.
  *     appUserId 부재 예외는 여기서 삼킨다 — 로깅이 요청을 죽이면 안 된다.
- *  2. traceId 생성 → MDC 적재(이 요청 안의 모든 하위 로그가 같은 traceId 로 묶임)
  *  3. proceed() 실행 → 성공이면 응답 요약, 예외면 ERROR 기록 후 **재던짐**(advice 가 안내 응답 생성)
  *  4. finally: 응답시간 계산, 레벨 분기(정상 INFO / 느림 WARN / 예외 ERROR), MDC 정리
  *
