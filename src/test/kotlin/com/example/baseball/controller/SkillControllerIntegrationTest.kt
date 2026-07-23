@@ -18,7 +18,6 @@ import org.springframework.test.web.servlet.post
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @SpringBootTest
@@ -245,8 +244,8 @@ class SkillControllerIntegrationTest @Autowired constructor(
     }
 
     @Test
-    @DisplayName("appUserId 가 없는 페이로드는 안내 응답만 주고 게임을 만들지 않는다")
-    fun missingAppUserIdIsRejected() {
+    @DisplayName("appUserId 가 없어도 botUserKey 로 게임을 만든다 (임시: 비즈니스 인증 전)")
+    fun missingAppUserIdFallsBackToBotUserKey() {
         val room = "it-bot-noappid"
         val payload =
             """{"userRequest":{"utterance":"시작","user":{"id":"no-appid"},"chat":{"properties":{"botGroupKey":"$room"}}}}"""
@@ -256,10 +255,10 @@ class SkillControllerIntegrationTest @Autowired constructor(
             content = payload
         }.andExpect {
             status { isOk() }
-            jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("잠시 후 다시 시도")) }
         }
 
-        assertNull(gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING))
+        assertNotNull(gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING))
+        assertNotNull(userRepository.findByAppUserId("no-appid")) // botUserKey 로 폴백 저장
     }
 
     /** 정답과 다른, 서로 다른 숫자 4자리 추측을 하나 생성 */
