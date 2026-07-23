@@ -56,7 +56,7 @@ class GameService(
     ): StartOutcome {
         userService.register(id)
 
-        val replaced = gameRepository.findAllByBotKeyAndStatus(id.botKey, GameStatus.PLAYING)
+        val replaced = gameRepository.findAllByBotKeyAndStatusOrderByIdDesc(id.botKey, GameStatus.PLAYING)
         replaced.forEach { it.giveUp() }
 
         val game = gameRepository.save(

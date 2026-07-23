@@ -36,11 +36,14 @@ class GameServiceTest {
         return slot
     }
 
-    /** 방의 진행중 게임을 세팅한다. 마지막 인자가 "최신" 게임으로 취급된다. */
+    /**
+     * 방의 진행중 게임을 세팅한다. 마지막 인자가 "최신" 게임으로 취급된다.
+     * findAll 스텁은 실제 쿼리(최신순)를 흉내 내기 위해 vararg 를 뒤집어 반환한다.
+     */
     private fun playingGames(vararg games: Game) {
         every {
-            gameRepository.findAllByBotKeyAndStatus(identity.botKey, GameStatus.PLAYING)
-        } returns games.toList()
+            gameRepository.findAllByBotKeyAndStatusOrderByIdDesc(identity.botKey, GameStatus.PLAYING)
+        } returns games.reversed()
         every {
             gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(identity.botKey, GameStatus.PLAYING)
         } returns games.lastOrNull()
@@ -147,10 +150,11 @@ class GameServiceTest {
             playingGames(older, newer)
             captureSave()
 
-            sut.startGame(identity)
+            val outcome = sut.startGame(identity)
 
             assertEquals(GameStatus.GIVEUP, older.status)
             assertEquals(GameStatus.GIVEUP, newer.status)
+            assertEquals("5678", outcome.replacedAnswer) // 최신 게임(newer)의 정답을 알린다
         }
     }
 
