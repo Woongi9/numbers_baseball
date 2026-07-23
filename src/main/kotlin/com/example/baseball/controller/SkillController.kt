@@ -78,8 +78,12 @@ class SkillController(
     private fun handle(identity: ChatIdentity, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
             SkillCommand.START -> {
-                gameService.startGame(identity)
-                val text = "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
+                val outcome = gameService.startGame(identity)
+                // 방 단위라 남의 게임을 끊을 수 있다. 무엇이 종료됐는지 밝히지 않으면 판이 갑자기 바뀐 것처럼 보인다.
+                val text = buildString {
+                    outcome.replacedAnswer?.let { appendLine("진행 중이던 게임(정답 $it)을 종료했어요.") }
+                    append("새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)")
+                }
                 cardOrText(
                     image = ResultImage.START,
                     title = "⚾ 새 게임 시작",

@@ -16,7 +16,10 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -212,6 +215,51 @@ class SkillControllerIntegrationTest @Autowired constructor(
     @DisplayName("랭킹: 해당 봇에 점수가 없으면 안내 메시지")
     fun rankingEmpty() {
         play("랭킹", "any-user", "아직 랭킹에 등록된 점수가 없습니다", botKey = "it-bot-empty")
+    }
+
+    @Test
+    @DisplayName("방 단위: 다른 사람이 시작하면 진행중이던 게임을 종료하고 그 정답을 알린다")
+    fun startReplacesRoomGame() {
+        val room = "it-bot-replace"
+        play("시작", "starter", "새 게임", botKey = room)
+        val first = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING)!!
+
+        play("시작", "intruder", "진행 중이던 게임(정답 ${first.answer})을 종료했어요", botKey = room)
+
+        assertEquals(GameStatus.GIVEUP, gameRepository.findById(first.id!!).orElseThrow().status)
+        val second = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING)!!
+        assertNotEquals(first.id, second.id)
+    }
+
+    @Test
+    @DisplayName("방 단위: A가 시작한 게임을 B가 맞히면 점수는 B에게 간다")
+    fun winnerGetsScore() {
+        val room = "it-bot-winner"
+        play("시작", "opener", "새 게임", botKey = room)
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING)!!
+
+        play(game.answer, "finisher", "정답", botKey = room)
+
+        assertEquals(0, userRepository.findByAppUserId("app-opener")!!.score)
+        assertTrue(userRepository.findByAppUserId("app-finisher")!!.score > 0)
+    }
+
+    @Test
+    @DisplayName("appUserId 가 없는 페이로드는 안내 응답만 주고 게임을 만들지 않는다")
+    fun missingAppUserIdIsRejected() {
+        val room = "it-bot-noappid"
+        val payload =
+            """{"userRequest":{"utterance":"시작","user":{"id":"no-appid"},"chat":{"properties":{"botGroupKey":"$room"}}}}"""
+
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = payload
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.template.outputs[0].simpleText.text") { value(containsString("잠시 후 다시 시도")) }
+        }
+
+        assertNull(gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING))
     }
 
     /** 정답과 다른, 서로 다른 숫자 4자리 추측을 하나 생성 */
