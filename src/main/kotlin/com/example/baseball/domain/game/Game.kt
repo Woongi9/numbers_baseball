@@ -12,11 +12,10 @@ import jakarta.persistence.Table
 import java.time.LocalDateTime
 
 /**
- * 한 판의 숫자야구 게임 세션.
+ * 한 판의 숫자야구 게임 세션. 채팅방(botKey) 단위로 스코프된다 — 방 하나당 진행중 게임 하나.
  *
- * - 상태 전이(승리/포기)는 외부에서 status를 직접 바꾸지 않고 도메인 메서드로만 수행한다.
- *   → 항상 finishedAt이 함께 채워져 데이터 정합성이 깨지지 않는다.
- * - (bot_key, status) 복합 인덱스: bot_key 컬럼엔 게임 세션 키(방 단위) = `botKey ?: appUserId` 가 들어간다. 그룹/오픈채팅은 방 하나당 게임 하나, 1:1(botKey null)은 유저 자신이 방. 매 요청마다 "이 방의 PLAYING 게임" 조회가 일어나므로 필수.
+ * 상태 전이(승리/포기)는 외부에서 status 를 직접 바꾸지 않고 도메인 메서드로만 수행한다.
+ * → 항상 finishedAt 이 함께 채워져 데이터 정합성이 깨지지 않는다.
  */
 @Entity
 @Table(

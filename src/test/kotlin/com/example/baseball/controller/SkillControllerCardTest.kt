@@ -65,7 +65,7 @@ class SkillControllerCardTest @Autowired constructor(
             content = body("시작", userId)
         }.andExpect { status { isOk() } }
 
-        val answer = gameRepository.findFirstByBotKeyAndStatus("bot-$userId", GameStatus.PLAYING)!!.answer
+        val answer = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc("bot-$userId", GameStatus.PLAYING)!!.answer
 
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
@@ -90,7 +90,7 @@ class SkillControllerCardTest @Autowired constructor(
             content = body("시작", userId)
         }.andExpect { status { isOk() } }
 
-        val answer = gameRepository.findFirstByBotKeyAndStatus("bot-$userId", GameStatus.PLAYING)!!.answer
+        val answer = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc("bot-$userId", GameStatus.PLAYING)!!.answer
         val wrong = listOf("0123", "4567", "8901", "2345").first { it != answer }
 
         mockMvc.post("/skill/play") {

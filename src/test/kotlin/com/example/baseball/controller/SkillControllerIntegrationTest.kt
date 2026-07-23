@@ -71,7 +71,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
 
         // 1) 시작
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(roomOf(userId), GameStatus.PLAYING)
         assertNotNull(game) // DB에 진행중 게임 생성됨
 
         // 2) DB의 실제 정답으로 추측 → 승리 (STEP-11 연출 문구는 가변이므로 안정적 키워드 "정답"만 검증)
@@ -88,7 +88,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun guessStripsZeroWidthPrefix() {
         val userId = "it-user-zwsp"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(roomOf(userId), GameStatus.PLAYING)!!
 
         // 프리필 잔여물(U+200B)이 추측 앞에 섞여 들어온 상황을 재현: "\u200B<정답>"
         play("\u200B${game.answer}", userId, "정답")
@@ -105,7 +105,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
             contentType = MediaType.APPLICATION_JSON
             content = body("시작", userId, botKey = botKey)
         }.andExpect { status { isOk() } }
-        val game = gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(botKey, GameStatus.PLAYING)!!
 
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
@@ -124,7 +124,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startWrongGuess() {
         val userId = "it-user-wrong"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(roomOf(userId), GameStatus.PLAYING)!!
 
         // 정답과 다른, 규칙에 맞는 추측 하나를 만든다(서로 다른 숫자 4자리)
         val wrong = firstValidGuessDifferentFrom(game.answer)
@@ -140,7 +140,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startGiveUp() {
         val userId = "it-user-giveup"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(roomOf(userId), GameStatus.PLAYING)!!
 
         play("포기", userId, game.answer) // 응답에 정답이 포함됨
 

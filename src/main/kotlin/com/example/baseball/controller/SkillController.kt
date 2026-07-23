@@ -78,7 +78,7 @@ class SkillController(
     private fun handle(identity: ChatIdentity, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
             SkillCommand.START -> {
-                gameService.startGame(identity.appUserId, identity.botKey)
+                gameService.startGame(identity)
                 val text = "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
                 cardOrText(
                     image = ResultImage.START,
@@ -95,7 +95,7 @@ class SkillController(
             }
 
             SkillCommand.GIVEUP -> {
-                val answer = gameService.giveUp(identity.appUserId, identity.botKey)
+                val answer = gameService.giveUp(identity)
                 cardOrText(
                     image = ResultImage.GIVEUP,
                     title = "🏳️ 게임 포기",
@@ -110,7 +110,7 @@ class SkillController(
 
             SkillCommand.RANKING -> formatRanking(identity.botKey)
 
-            SkillCommand.GUESS -> formatGuess(gameService.guess(identity.appUserId, identity.botKey, utterance))
+            SkillCommand.GUESS -> formatGuess(gameService.guess(identity, utterance))
 
             SkillCommand.HELP -> {
                 val body = helpMessage()

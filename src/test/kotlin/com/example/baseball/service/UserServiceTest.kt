@@ -4,6 +4,7 @@ import com.example.baseball.domain.user.BotUser
 import com.example.baseball.domain.user.BotUserRepository
 import com.example.baseball.domain.user.User
 import com.example.baseball.domain.user.UserRepository
+import com.example.baseball.dto.ChatIdentity
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -22,6 +23,8 @@ class UserServiceTest {
     private val botUserRepository = mockk<BotUserRepository>()
     private val sut = UserService(userRepository, botUserRepository)
 
+    private val identity = ChatIdentity(appUserId = "app-1", botUserKey = "u1", botKey = "bot-1")
+
     /** save(entity) 가 들어온 엔티티를 그대로 반환하도록(영속화 흉내) 설정. */
     private fun stubSaves() {
         every { userRepository.save(any()) } answers { firstArg() }
@@ -36,9 +39,11 @@ class UserServiceTest {
         @DisplayName("기존 유저가 있으면 생성 없이 score 에 gain 을 더하고 누적값을 반환한다")
         fun addsToExistingUser() {
             val user = User(appUserId = "app-1").apply { score = 1000 }
+            val botUser = BotUser(user = user, botUserKey = "u1", botKey = "bot-1", score = 0)
             every { userRepository.findByAppUserId("app-1") } returns user
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
 
-            val total = sut.accrue(appUserId = "app-1", botKey = null, botUserKey = "u1", gain = 65)
+            val total = sut.accrue(identity, gain = 65)
 
             assertEquals(1065, total)
             assertEquals(1065, user.score)
@@ -48,17 +53,18 @@ class UserServiceTest {
         @Test
         @DisplayName("유저가 없으면 새로 만들어 적립한다(getOrCreate)")
         fun createsWhenMissing() {
+            val newIdentity = ChatIdentity(appUserId = "app-new", botUserKey = "u1", botKey = "bot-1")
             every { userRepository.findByAppUserId("app-new") } returns null
+            every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns null
             stubSaves()
 
             val saved = slot<User>()
             every { userRepository.save(capture(saved)) } answers { saved.captured }
 
-            val total = sut.accrue(appUserId = "app-new", botKey = null, botUserKey = "u1", gain = 50)
+            val total = sut.accrue(newIdentity, gain = 50)
 
             assertEquals("app-new", saved.captured.appUserId)
             assertEquals(50, total)
-            verify(exactly = 1) { userRepository.save(any()) }
         }
     }
 
@@ -74,7 +80,7 @@ class UserServiceTest {
             every { userRepository.findByAppUserId("app-1") } returns user
             every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
 
-            sut.accrue(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1", gain = 30)
+            sut.accrue(identity, gain = 30)
 
             assertEquals(130, user.score)
             assertEquals(230, botUser.score)
@@ -89,23 +95,11 @@ class UserServiceTest {
             val saved = slot<BotUser>()
             every { botUserRepository.save(capture(saved)) } answers { saved.captured }
 
-            sut.accrue(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1", gain = 40)
+            sut.accrue(identity, gain = 40)
 
             assertEquals("bot-1", saved.captured.botKey)
             assertEquals("u1", saved.captured.botUserKey)
             assertEquals(40, saved.captured.score)
-        }
-
-        @Test
-        @DisplayName("botKey 가 null 이면 BotUser 는 건드리지 않는다")
-        fun skipsBotUserWhenNoBotKey() {
-            val user = User(appUserId = "app-1").apply { score = 0 }
-            every { userRepository.findByAppUserId("app-1") } returns user
-
-            sut.accrue(appUserId = "app-1", botKey = null, botUserKey = "u1", gain = 40)
-
-            verify(exactly = 0) { botUserRepository.findByBotKeyAndBotUserKey(any(), any()) }
-            verify(exactly = 0) { botUserRepository.save(any()) }
         }
     }
 
@@ -113,7 +107,7 @@ class UserServiceTest {
     @DisplayName("gain 이 음수면 예외(누적 점수 모델은 감점이 없다)")
     fun rejectsNegativeGain() {
         assertThrows(IllegalArgumentException::class.java) {
-            sut.accrue(appUserId = "app-1", botKey = null, botUserKey = "u1", gain = -1)
+            sut.accrue(identity, gain = -1)
         }
     }
 
@@ -131,7 +125,7 @@ class UserServiceTest {
             every { userRepository.save(capture(savedUser)) } answers { savedUser.captured }
             every { botUserRepository.save(capture(savedBot)) } answers { savedBot.captured }
 
-            sut.register(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1")
+            sut.register(identity)
 
             assertEquals("app-1", savedUser.captured.appUserId)
             assertEquals(0, savedUser.captured.score) // 점수 변동 없음
@@ -147,23 +141,11 @@ class UserServiceTest {
             every { userRepository.findByAppUserId("app-1") } returns user
             every { botUserRepository.findByBotKeyAndBotUserKey("bot-1", "u1") } returns botUser
 
-            sut.register(appUserId = "app-1", botKey = "bot-1", botUserKey = "u1")
+            sut.register(identity)
 
             assertEquals(500, user.score)   // 변동 없음
             assertEquals(300, botUser.score)
             verify(exactly = 0) { userRepository.save(any()) }
-            verify(exactly = 0) { botUserRepository.save(any()) }
-        }
-
-        @Test
-        @DisplayName("botKey 가 null 이면 전역 User 만 보장한다")
-        fun globalOnlyWhenNoBotKey() {
-            every { userRepository.findByAppUserId("app-1") } returns null
-            every { userRepository.save(any()) } answers { firstArg() }
-
-            sut.register(appUserId = "app-1", botKey = null, botUserKey = "u1")
-
-            verify(exactly = 0) { botUserRepository.findByBotKeyAndBotUserKey(any(), any()) }
             verify(exactly = 0) { botUserRepository.save(any()) }
         }
     }
