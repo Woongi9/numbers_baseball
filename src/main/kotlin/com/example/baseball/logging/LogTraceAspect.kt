@@ -49,6 +49,7 @@ class LogTraceAspect {
         // 어느 방에서 이 오류가 났는지 놓치지 않도록 원본 요청에서 한 번 더 폴백한다.
         val botKey = identity?.botKey ?: request?.userRequest?.chat?.properties?.botGroupKey ?: "-"
         val botUserKey = identity?.botUserKey ?: request?.userRequest?.user?.id ?: "-"
+        val appUserId = identity?.appUserId ?: "-"
         val utterance = request?.userRequest?.utterance?.trim().orEmpty()
         val intent = SkillCommand.classify(utterance).name
 
@@ -57,7 +58,7 @@ class LogTraceAspect {
 
         // 요청 시작 기록. 처리 도중 죽어도(타임아웃·OOM 등) "들어온 요청"의 흔적은 남는다.
         log.info(
-            "phase=START botKey=$botKey user=$botUserKey command=$intent " +
+            "phase=START botKey=$botKey botUserKey=$botUserKey appUserId=$appUserId command=$intent " +
                 "utterance=\"${sanitize(utterance).take(SUMMARY_LEN)}\"",
         )
 
@@ -83,7 +84,7 @@ class LogTraceAspect {
         } finally {
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
             val slow = elapsedMs >= SLOW_THRESHOLD_MS
-            val line = "phase=END botKey=$botKey user=$botUserKey command=$intent " +
+            val line = "phase=END botKey=$botKey botUserKey=$botUserKey appUserId=$appUserId command=$intent " +
                 "status=$status elapsedMs=$elapsedMs slow=$slow result=\"$summary\""
             when {
                 status.startsWith("ERROR") -> log.error(line)
