@@ -1,5 +1,6 @@
 package com.example.baseball.controller
 
+import com.example.baseball.dto.ChatIdentity
 import com.example.baseball.dto.SkillRequest
 import com.example.baseball.dto.SkillResponse
 import com.example.baseball.service.GameService
@@ -60,12 +61,11 @@ class SkillController(
     )
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
-        val appUserId = request.userRequest.user.id
-        val botKey = request.userRequest.chat.properties.botGroupKey
+        val identity = ChatIdentity.from(request)
         // 멘션 프리필 버튼이 심는 제로폭 공백(U+200B 등)을 제거한 뒤 판정한다.
         // 이게 남으면 "​1234"가 숫자 판정(all isDigit)을 통과하지 못해 추측이 먹히지 않는다.
         val utterance = request.userRequest.utterance.replace(zeroWidthChars, "").trim()
-        return handle(appUserId, botKey, utterance)
+        return handle(identity, utterance)
     }
 
     /**
@@ -75,10 +75,10 @@ class SkillController(
      *
      * 카드 전환 범위: START(시작)·승리·GIVEUP(포기)은 BasicCard(썸네일), 진행중 추측·HELP(게임 규칙)은 TextCard(썸네일 없음), RANKING은 simpleText.
      */
-    private fun handle(appUserId: String, botKey: String, utterance: String): SkillResponse =
+    private fun handle(identity: ChatIdentity, utterance: String): SkillResponse =
         when (SkillCommand.classify(utterance)) {
             SkillCommand.START -> {
-                gameService.startGame(appUserId, botKey)
+                gameService.startGame(identity.appUserId, identity.botKey)
                 val text = "새 게임을 시작했습니다. ${GameService.DIGITS}자리 숫자를 맞혀보세요. (예: 1234)"
                 cardOrText(
                     image = ResultImage.START,
@@ -95,7 +95,7 @@ class SkillController(
             }
 
             SkillCommand.GIVEUP -> {
-                val answer = gameService.giveUp(appUserId, botKey)
+                val answer = gameService.giveUp(identity.appUserId, identity.botKey)
                 cardOrText(
                     image = ResultImage.GIVEUP,
                     title = "🏳️ 게임 포기",
@@ -108,9 +108,9 @@ class SkillController(
                 )
             }
 
-            SkillCommand.RANKING -> formatRanking(botKey)
+            SkillCommand.RANKING -> formatRanking(identity.botKey)
 
-            SkillCommand.GUESS -> formatGuess(gameService.guess(appUserId, botKey, utterance))
+            SkillCommand.GUESS -> formatGuess(gameService.guess(identity.appUserId, identity.botKey, utterance))
 
             SkillCommand.HELP -> {
                 val body = helpMessage()
@@ -242,13 +242,11 @@ class SkillController(
     }
 
     /**
-     * 봇(채팅방) 랭킹 TOP 10. botKey 없음·빈 랭킹은 안내 메시지로 변환.
+     * 봇(채팅방) 랭킹 TOP 10. 빈 랭킹은 안내 메시지로 변환.
      * 각 줄의 사용자 이름은 "{{#mentions.userN}}" 자리표시자로 두고, extra.mentions 에 botUserKey 를 등록해
      * 카카오가 실제 닉네임(@사용자) 멘션으로 치환하게 한다(STEP 12 배포 피드백 — 원시 키 노출 제거).
      */
-    private fun formatRanking(botKey: String?): SkillResponse {
-        if (botKey == null) return SkillResponse.text("채팅방 정보를 확인할 수 없어 랭킹을 보여줄 수 없습니다.")
-
+    private fun formatRanking(botKey: String): SkillResponse {
         val ranking = rankingService.getBotRanking(botKey)
         if (ranking.isEmpty()) {
             return SkillResponse.text("아직 랭킹에 등록된 점수가 없습니다. 게임에서 정답을 맞히면 점수가 쌓여요.")

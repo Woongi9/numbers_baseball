@@ -28,7 +28,7 @@ class LogTraceAspectTest {
             utterance = "1234",
             user = SkillRequest.User(id = "u1"),
             chat = SkillRequest.Chat(
-                properties = SkillRequest.Properties(botGroupKey = "bot-1"),
+                properties = SkillRequest.ChatProperties(botGroupKey = "bot-1"),
             ),
         ),
     )

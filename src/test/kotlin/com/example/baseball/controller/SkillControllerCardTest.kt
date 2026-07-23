@@ -30,7 +30,7 @@ class SkillControllerCardTest @Autowired constructor(
     private val gameRepository: GameRepository,
 ) {
     private fun body(utterance: String, userId: String): String =
-        """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}}}"""
+        """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId","properties":{"appUserId":"app-$userId","botUserKey":"$userId"}},"chat":{"properties":{"botGroupKey":"bot-$userId"}}}}"""
 
     @Test
     @DisplayName("시작 응답은 start 썸네일 + 버튼을 가진 basicCard 다")
@@ -65,7 +65,7 @@ class SkillControllerCardTest @Autowired constructor(
             content = body("시작", userId)
         }.andExpect { status { isOk() } }
 
-        val answer = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!.answer
+        val answer = gameRepository.findFirstByBotKeyAndStatus("bot-$userId", GameStatus.PLAYING)!!.answer
 
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
@@ -90,7 +90,7 @@ class SkillControllerCardTest @Autowired constructor(
             content = body("시작", userId)
         }.andExpect { status { isOk() } }
 
-        val answer = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!.answer
+        val answer = gameRepository.findFirstByBotKeyAndStatus("bot-$userId", GameStatus.PLAYING)!!.answer
         val wrong = listOf("0123", "4567", "8901", "2345").first { it != answer }
 
         mockMvc.post("/skill/play") {

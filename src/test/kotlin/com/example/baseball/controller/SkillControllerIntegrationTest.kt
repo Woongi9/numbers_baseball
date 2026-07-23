@@ -27,14 +27,25 @@ class SkillControllerIntegrationTest @Autowired constructor(
     private val userRepository: UserRepository,
     private val botUserRepository: BotUserRepository,
 ) {
-    /** 카카오 스킬 요청 본문 생성 (botKey 선택적으로 chat.properties.botGroupKey 포함) */
-    private fun body(utterance: String, userId: String, botKey: String? = null): String {
-        val chatPart = botKey?.let { ""","chat":{"properties":{"botGroupKey":"$it"}}""" } ?: ""
-        return """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId"}$chatPart}}"""
-    }
+    /**
+     * 카카오 스킬 요청 본문. 게임이 방 단위라 botKey 를 고정하면 테스트끼리 서로의 게임을 끊는다.
+     * 그래서 방 키를 유저별로 파생시켜 기존의 테스트 간 격리를 그대로 유지한다.
+     */
+    private fun body(
+        utterance: String,
+        userId: String,
+        botKey: String = roomOf(userId),
+    ): String =
+        """{"userRequest":{"utterance":"$utterance","user":{"id":"$userId","properties":{"appUserId":"app-$userId","botUserKey":"$userId"}},"chat":{"properties":{"botGroupKey":"$botKey"}}}}"""
 
-    /** /skill/play 호출 후 simpleText.text 가 expected 를 포함하는지 검증 */
-    private fun play(utterance: String, userId: String, expectedText: String, botKey: String? = "bot-1") {
+    private fun roomOf(userId: String) = "bot-$userId"
+
+    private fun play(
+        utterance: String,
+        userId: String,
+        expectedText: String,
+        botKey: String = roomOf(userId),
+    ) {
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
             content = body(utterance, userId, botKey)
@@ -60,7 +71,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
 
         // 1) 시작
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)
+        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)
         assertNotNull(game) // DB에 진행중 게임 생성됨
 
         // 2) DB의 실제 정답으로 추측 → 승리 (STEP-11 연출 문구는 가변이므로 안정적 키워드 "정답"만 검증)
@@ -77,7 +88,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun guessStripsZeroWidthPrefix() {
         val userId = "it-user-zwsp"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
 
         // 프리필 잔여물(U+200B)이 추측 앞에 섞여 들어온 상황을 재현: "\u200B<정답>"
         play("\u200B${game.answer}", userId, "정답")
@@ -94,7 +105,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
             contentType = MediaType.APPLICATION_JSON
             content = body("시작", userId, botKey = botKey)
         }.andExpect { status { isOk() } }
-        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(botKey, GameStatus.PLAYING)!!
 
         mockMvc.post("/skill/play") {
             contentType = MediaType.APPLICATION_JSON
@@ -113,7 +124,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startWrongGuess() {
         val userId = "it-user-wrong"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
 
         // 정답과 다른, 규칙에 맞는 추측 하나를 만든다(서로 다른 숫자 4자리)
         val wrong = firstValidGuessDifferentFrom(game.answer)
@@ -129,7 +140,7 @@ class SkillControllerIntegrationTest @Autowired constructor(
     fun startGiveUp() {
         val userId = "it-user-giveup"
         play("시작", userId, "새 게임")
-        val game = gameRepository.findFirstByBotKeyAndStatus(userId, GameStatus.PLAYING)!!
+        val game = gameRepository.findFirstByBotKeyAndStatus(roomOf(userId), GameStatus.PLAYING)!!
 
         play("포기", userId, game.answer) // 응답에 정답이 포함됨
 
@@ -201,12 +212,6 @@ class SkillControllerIntegrationTest @Autowired constructor(
     @DisplayName("랭킹: 해당 봇에 점수가 없으면 안내 메시지")
     fun rankingEmpty() {
         play("랭킹", "any-user", "아직 랭킹에 등록된 점수가 없습니다", botKey = "it-bot-empty")
-    }
-
-    @Test
-    @DisplayName("랭킹: bot 정보가 없으면 안내 메시지")
-    fun rankingNoBotKey() {
-        play("랭킹", "any-user", "채팅방 정보를 확인할 수 없어")
     }
 
     /** 정답과 다른, 서로 다른 숫자 4자리 추측을 하나 생성 */

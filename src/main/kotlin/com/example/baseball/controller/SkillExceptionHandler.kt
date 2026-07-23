@@ -1,5 +1,6 @@
 package com.example.baseball.controller
 
+import com.example.baseball.dto.MissingAppUserIdException
 import com.example.baseball.dto.SkillResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -32,6 +33,11 @@ class SkillExceptionHandler(
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleIllegalArgument(e: IllegalArgumentException): SkillResponse =
         guide(e.message ?: "입력이 올바르지 않습니다.")
+
+    /** appUserId 없는 요청. 전역 정체성을 만들 수 없어 게임을 진행하지 않는다. */
+    @ExceptionHandler(MissingAppUserIdException::class)
+    fun handleMissingAppUserId(e: MissingAppUserIdException): SkillResponse =
+        guide("일시적인 문제가 발생했어요. 잠시 후 다시 시도해주세요.")
 
     /**
      * 안내 메시지를 [멘션·게임 규칙] 버튼과 함께 TextCard로 응답한다.
