@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.post
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @SpringBootTest
@@ -259,6 +260,49 @@ class SkillControllerIntegrationTest @Autowired constructor(
 
         assertNotNull(gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING))
         assertNotNull(userRepository.findByAppUserId("no-appid")) // botUserKey 로 폴백 저장
+    }
+
+    @Test
+    @DisplayName("이관: 인증 완료 후 진짜 appUserId 가 오면 임시 User 행을 개명하고 점수를 보존한다")
+    fun migratesTempUserToRealAppUserIdPreservingScore() {
+        val botUserKey = "it-user-migrate"
+        val room = "it-bot-migrate"
+
+        fun noAppIdPayload(utterance: String) =
+            """{"userRequest":{"utterance":"$utterance","user":{"id":"$botUserKey"},"chat":{"properties":{"botGroupKey":"$room"}}}}"""
+
+        // 1) appUserId 없는 페이로드로 시작 → botUserKey 로 임시 User 행 생성
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = noAppIdPayload("시작")
+        }.andExpect { status { isOk() } }
+        val game = gameRepository.findFirstByBotKeyAndStatusOrderByIdDesc(room, GameStatus.PLAYING)!!
+
+        // 2) 같은 botUserKey 로 정답 제출 → 승리, 임시 User 에 점수 적립
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = noAppIdPayload(game.answer)
+        }.andExpect { status { isOk() } }
+
+        val tempUser = userRepository.findByAppUserId(botUserKey)!!
+        val scoreBeforeMigration = tempUser.score
+        assertTrue(scoreBeforeMigration > 0) // 이관 전 점수가 실제로 쌓였는지 확인
+
+        // 3) 같은 botUserKey 에 이번엔 진짜(≠botUserKey) appUserId 를 포함해 요청
+        val realAppUserId = "real-app-id-migrate"
+        val migratePayload =
+            """{"userRequest":{"utterance":"시작","user":{"id":"$botUserKey","properties":{"appUserId":"$realAppUserId","botUserKey":"$botUserKey"}},"chat":{"properties":{"botGroupKey":"$room"}}}}"""
+        mockMvc.post("/skill/play") {
+            contentType = MediaType.APPLICATION_JSON
+            content = migratePayload
+        }.andExpect { status { isOk() } }
+
+        // 임시행이 새 appUserId 로 개명됨(새 INSERT 아님) + 점수 보존
+        assertNull(userRepository.findByAppUserId(botUserKey))
+        val migrated = userRepository.findByAppUserId(realAppUserId)
+        assertNotNull(migrated)
+        assertEquals(tempUser.id, migrated!!.id)
+        assertEquals(scoreBeforeMigration, migrated.score)
     }
 
     /** 정답과 다른, 서로 다른 숫자 4자리 추측을 하나 생성 */
