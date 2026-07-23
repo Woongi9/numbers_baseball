@@ -36,8 +36,8 @@ class LogTraceAspect {
 
     @Around("execution(* com.example.baseball.controller.SkillController.play(..))")
     fun trace(joinPoint: ProceedingJoinPoint): Any? {
-        // Generate and register traceId in MDC first: identity resolution can itself emit logs,
-        // which must reference this traceId for correlation.
+        // traceId 를 MDC 에 먼저 심는다. 식별자 해석(ChatIdentity)이 폴백 WARN 을 남길 수 있는데,
+        // 그 로그가 traceId 로 묶이려면 이 시점에 이미 MDC 에 들어 있어야 한다.
         val traceId = UUID.randomUUID().toString().take(TRACE_ID_LEN)
         MDC.put(TraceKeys.TRACE_ID, traceId)
 
