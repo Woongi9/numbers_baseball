@@ -49,7 +49,10 @@ class SkillController(
     /** 카드(BasicCard/TextCard) 노출 여부. 이미지 URL이 설정된 환경(prod/local)에서만 카드를 쓴다. */
     private val cardsEnabled: Boolean get() = imageBaseUrl.isNotBlank()
 
-    /** 멘션 프리필이 심는 제로폭 문자군(U+200B/C/D, U+FEFF). 발화 판정 전에 제거한다. */
+    /**
+     * 발화에 섞여 들어오는 제로폭 문자군(U+200B/C/D, U+FEFF). 판정 전에 제거한다.
+     * 이게 남으면 "​1234" 가 숫자 판정(all isDigit)을 통과하지 못해 추측이 조용히 안 먹힌다.
+     */
     private val zeroWidthChars = Regex("[\\u200B\\u200C\\u200D\\uFEFF]")
     /**
      * 카카오 오픈빌더 스킬 엔드포인트.
@@ -62,8 +65,6 @@ class SkillController(
     @PostMapping("/skill/play")
     fun play(@RequestBody request: SkillRequest): SkillResponse {
         val identity = ChatIdentity.from(request)
-        // 멘션 프리필 버튼이 심는 제로폭 공백(U+200B 등)을 제거한 뒤 판정한다.
-        // 이게 남으면 "​1234"가 숫자 판정(all isDigit)을 통과하지 못해 추측이 먹히지 않는다.
         val utterance = request.userRequest.utterance.replace(zeroWidthChars, "").trim()
         return handle(identity, utterance)
     }
@@ -170,9 +171,6 @@ class SkillController(
         return textCardOrText(
             title = sb,
             description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
-            // 오픈채팅에선 message 버튼 클릭 시 "@봇 " + messageText가 입력창에 프리필된다(즉시 전송 아님).
-            // messageText가 비거나 공백이면 카카오가 "값 없음"으로 보고 버튼 label("제출")로 대체해
-            // "@봇 제출"이 노출되므로, mentionPrefill은 제로폭 공백(U+200B)을 보내 "@봇 "만 남긴다.
             buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
             // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
             fallbackText = "${outcome.tries}번째 시도: $sb",

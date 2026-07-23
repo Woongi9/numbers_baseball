@@ -133,24 +133,17 @@ data class SkillResponse(
         val webLinkUrl: String? = null,
     ) {
         companion object {
-            /** 제로폭 공백(U+200B). 멘션 프리필에서 라벨 대체를 막는 '보이지 않는 non-blank' 값. */
-            const val ZERO_WIDTH_SPACE = "\u200B"
-
             /** '메시지' 버튼: 누르면 messageText를 사용자가 입력한 것처럼 재발화한다. */
             fun message(label: String, messageText: String): Button =
                 Button(label = label, action = "message", messageText = messageText)
 
             /**
-             * 오픈채팅 멘션 프리필용 버튼.
-             * 오픈채팅에서 message 버튼은 입력창에 "@봇 " + messageText 를 프리필한다.
-             * 목표는 "@봇 "만 남기고(라벨/문구는 안 보이게) 유저가 곧바로 숫자를 이어 입력하게 하는 것.
+             * 오픈채팅 멘션 프리필용 버튼. 누르면 입력창에 "@봇 "만 채워지고 유저가 곧바로 숫자를 이어 친다.
              *
-             * messageText 로 [제로폭 공백 U+200B]을 쓰는 이유(배포 피드백):
-             *  - ""(빈 문자열)이나 " "(공백)으로 두면 카카오가 "값 없음"으로 보고 버튼 라벨(예: "제출")을
-             *    대신 프리필해 "@봇 제출"이 되어버린다.
-             *  - U+200B 는 '보이지 않지만 빈 값은 아닌' 문자라 라벨 대체를 막으면서 화면상 "@봇 "만 보이게 한다.
-             * 주의: 이 문자가 이어지는 추측 입력에 섞여 들어오므로, SkillController 입력단에서 제거해야
-             *       "\u200B1234" 같은 값이 숫자 판정(all isDigit)을 통과한다.
+             * `action = "mention"` 은 그 용도로 만들어진 액션이라 messageText 가 필요 없다.
+             * 예전엔 `action = "message"` + messageText 로 흉내냈는데, messageText 를 비우면 카카오가
+             * "값 없음"으로 보고 버튼 label("제출")을 대신 프리필해 "@봇 제출"이 노출됐다. 제로폭 공백을
+             * 넣어 우회하던 건 그 시절 얘기다 — "mention" 액션엔 그 문제가 없다.
              */
             fun mentionPrefill(label: String): Button =
                 Button(label = label, action = "mention")

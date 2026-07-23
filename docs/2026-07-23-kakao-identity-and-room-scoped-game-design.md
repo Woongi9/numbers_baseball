@@ -35,7 +35,11 @@
 
 ### D1. 기존 데이터 이관 — 하지 않는다
 
-이 변경은 아직 prod 에 배포되지 않았다. `users.app_user_id` 에 `user.id` 가 들어간 기존 행을 실제 `appUserId` 로 백필하는 이관 로직은 만들지 않는다. `ddl-auto: update` 이므로 스키마는 자동 반영된다.
+`users.app_user_id` 에 `user.id` 가 들어간 기존 행을 실제 `appUserId` 로 백필하는 이관 로직은 만들지 않는다. prod 의 `users`/`bot_users` 데이터는 버려도 되는 것으로 확인했다(소유자 확인, 2026-07-23).
+
+> **주의 — 이관을 건너뛴 대가**: 만약 지킬 데이터가 있었다면 결과는 "옛 점수 유실"이 아니라 **영구적 불일치**다. `getOrCreateUser(appUserId)` 는 새 `User`(score 0)를 만들지만 `getOrCreateBotUser` 는 기존 `BotUser` 를 찾아 그대로 반환하고, `BotUser.user` 는 `val` 이라 재연결되지 않는다. `RankingService` 는 `botUser.user.score`(고아가 된 옛 `User`)를 읽으므로 랭킹엔 멈춘 숫자가, 승리 메시지엔 오르는 숫자가 나온다. 나중에 살아있는 데이터가 있는 환경에 이 변경을 적용한다면 두 테이블을 비우거나 `getOrCreateBotUser` 에서 재연결하는 절차가 반드시 필요하다.
+
+> **스키마 주의**: `ddl-auto` 가 `update` 인 건 `local`/`dev` 뿐이다. **prod 는 `validate`** 이므로(`application-prod.yml:36`) 새 테이블(`season_user_scores`, `season_bot_scores`)의 DDL 을 배포 **전에** 직접 적용해야 한다. 안 하면 기동 실패 → 헬스체크 미달 → `start.sh` 가 이전 jar 로 롤백한다.
 
 ### D2. DTO 는 전부 nullable, `ChatIdentity` 에서 non-null 확정
 
@@ -48,6 +52,8 @@ DTO 를 non-null 로 못 박으면 값이 빠진 페이로드 한 건에 **Jacks
 ### D3. `appUserId` 부재는 폴백하지 않고 거부한다
 
 `appUserId` 는 채널에 카카오 앱키가 연동된 경우에만 내려온다(이 저장소는 같은 이유로 랭킹 멘션 타입을 `appUserId` → `botUserKey` 로 되돌린 이력이 있다: `637a480` → `38382b8`).
+
+> **2026-07-23 확인**: 이 채널은 앱키 연동이 되어 있다(소유자 확인). 따라서 아래 거부 경로는 정상 트래픽에서 타지 않으며, 연동이 끊기거나 설정이 바뀌는 경우를 잡는 안전망으로 남는다. `PLAN.md:713-714` 의 "실제 카카오 JSON 로깅으로 `properties.appUserId` 수신 확인" 항목은 여전히 미체크이므로, dev 배포 후 실제 페이로드 1건으로 확정하고 체크하는 것이 좋다.
 
 `appUserId ?: botUserKey` 폴백은 **요구사항 3 을 정면으로 깬다.** 같은 사람이 A 방·B 방에 있는데 appUserId 가 안 오면 `users` 행이 2개로 갈리고 방마다 다른 점수가 노출된다.
 
@@ -75,6 +81,8 @@ DB 로 강제하려면 "PLAYING 일 때만 값이 차는 별도 컬럼"(`active_
 - `currentGame` 은 **최신 1건**을 쓴다.
 
 동시 시작으로 유령이 생겨도 다음 `시작` 때 정리되고, 그 사이엔 최신 게임이 정상 동작한다. 불변식은 "DB 보장"이 아니라 "수렴 보장"이다.
+
+> **동시 *추측*은 감수한다(2026-07-23 결정).** 방 단위가 되면서 같은 방의 두 명이 거의 동시에 정답을 낼 수 있는데, `Game` 에 `@Version` 이 없어 둘 다 `check(isPlaying)` 을 통과하고 둘 다 `win()`·`accrue` 할 수 있다. 유저 단위였을 땐 카카오가 유저별 발화를 직렬화해줘서 불가능했던 일이다. 확률이 낮고 피해도 작아(점수 몇 점 중복) 낙관적 락을 걸지 않기로 했다. 되짚을 일이 생기면 `Game` 에 `@Version` 을 얹고 `OptimisticLockException` 을 `SkillExceptionHandler` 에서 200 안내로 변환하면 된다(카카오는 non-200 금지).
 
 ### D7. 점수 귀속 — 맞힌 사람
 
