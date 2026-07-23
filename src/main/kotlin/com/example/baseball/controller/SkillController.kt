@@ -170,8 +170,9 @@ class SkillController(
         return textCardOrText(
             title = sb,
             description = "${outcome.tries}번째 시도예요. '제출'을 눌러 다음 숫자를 입력하세요. (예: 7428)",
-            // 오픈채팅에선 message 버튼 클릭 시 "@봇 "이 입력창에 프리필된다(즉시 전송 아님).
-            // messageText를 빈 값으로 두어 멘션만 깔끔히 채워지도록 한다(실제 프리필 내용은 오픈채팅 테스트로 확인).
+            // 오픈채팅에선 message 버튼 클릭 시 "@봇 " + messageText가 입력창에 프리필된다(즉시 전송 아님).
+            // messageText가 비거나 공백이면 카카오가 "값 없음"으로 보고 버튼 label("제출")로 대체해
+            // "@봇 제출"이 노출되므로, mentionPrefill은 제로폭 공백(U+200B)을 보내 "@봇 "만 남긴다.
             buttons = listOf(SkillResponse.Button.mentionPrefill("제출")),
             // fallbackText는 기존 simpleText 문구("N번째 시도: ...")를 유지해 하위 호환/테스트 안정.
             fallbackText = "${outcome.tries}번째 시도: $sb",
