@@ -44,7 +44,10 @@ class LogTraceAspect {
 
         val request = joinPoint.args.firstOrNull() as? SkillRequest
         val identity = request?.let { ChatIdentity.fromOrNull(it) }
-        val botKey = identity?.botKey ?: "-"
+        // identity 가 null 이면(appUserId 부재) botKey 도 통째로 사라진다.
+        // 하지만 요청에는 chat.properties.botGroupKey 가 여전히 실려 있을 수 있으므로,
+        // 어느 방에서 이 오류가 났는지 놓치지 않도록 원본 요청에서 한 번 더 폴백한다.
+        val botKey = identity?.botKey ?: request?.userRequest?.chat?.properties?.botGroupKey ?: "-"
         val botUserKey = identity?.botUserKey ?: request?.userRequest?.user?.id ?: "-"
         val utterance = request?.userRequest?.utterance?.trim().orEmpty()
         val intent = SkillCommand.classify(utterance).name
