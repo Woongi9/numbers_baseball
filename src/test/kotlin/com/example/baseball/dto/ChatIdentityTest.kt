@@ -1,8 +1,10 @@
 package com.example.baseball.dto
 
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @DisplayName("ChatIdentity.from - 카카오 식별자 확정")
 class ChatIdentityTest {
@@ -48,12 +50,11 @@ class ChatIdentityTest {
     }
 
     @Test
-    @DisplayName("properties 블록이 없으면 appUserId 를 user.id 폴백값(botUserKey)으로 채운다")
-    fun noPropertiesBlockFallsBack() {
-        val id = ChatIdentity.from(request(withProperties = false))
-
-        assertEquals("user-id", id.botUserKey)
-        assertEquals("user-id", id.appUserId)
+    @DisplayName("properties 블록 자체가 없으면 appUserId 를 만들 수 없어 예외")
+    fun noPropertiesBlockThrows() {
+        assertThrows(MissingAppUserIdException::class.java) {
+            ChatIdentity.from(request(withProperties = false))
+        }
     }
 
     @Test
@@ -74,18 +75,17 @@ class ChatIdentityTest {
     }
 
     @Test
-    @DisplayName("appUserId 가 없으면 botUserKey 로 폴백한다 (임시: 비즈니스 인증 전)")
-    fun missingAppUserIdFallsBackToBotUserKey() {
-        val id = ChatIdentity.from(request(appUserId = null))
-
-        assertEquals("buk-1", id.appUserId)
-        assertEquals("buk-1", id.botUserKey)
+    @DisplayName("appUserId 가 없으면 MissingAppUserIdException — 폴백하지 않는다")
+    fun missingAppUserIdThrows() {
+        assertThrows(MissingAppUserIdException::class.java) {
+            ChatIdentity.from(request(appUserId = null))
+        }
     }
 
     @Test
-    @DisplayName("fromOrNull 은 appUserId 가 없어도 폴백된 identity 를 준다")
-    fun fromOrNullFallsBack() {
-        assertEquals("buk-1", ChatIdentity.fromOrNull(request(appUserId = null))?.appUserId)
+    @DisplayName("fromOrNull 은 appUserId 가 없으면 null 을 준다 (로깅 aspect 용)")
+    fun fromOrNullSwallows() {
+        assertNull(ChatIdentity.fromOrNull(request(appUserId = null)))
         assertEquals("app-1", ChatIdentity.fromOrNull(request())?.appUserId)
     }
 }

@@ -62,7 +62,7 @@ class UserService(
     fun accrue(id: ChatIdentity, gain: Int): Int {
         require(gain >= 0) { "gain 은 0 이상이어야 합니다. (입력: $gain)" }
 
-        val user = getOrCreateUser(id)
+        val user = getOrCreateUser(id.appUserId)
         user.score += gain
         getOrCreateBotUser(user, id.botKey, id.botUserKey).score += gain
 
@@ -75,42 +75,23 @@ class UserService(
      */
     @Transactional
     fun register(id: ChatIdentity) {
-        val user = getOrCreateUser(id)
+        val user = getOrCreateUser(id.appUserId)
         getOrCreateBotUser(user, id.botKey, id.botUserKey)
     }
 
     /**
      * 전역 유저 조회, 없으면 생성. UNIQUE(app_user_id) 가 동시성 중복의 최종 방어선.
-     *
-     * 임시(비즈니스 인증 전) 기간엔 appUserId 가 botUserKey 로 폴백돼 저장된다. 인증 완료 후
-     * 진짜 appUserId(≠ botUserKey) 가 처음 오면 그 임시행을 개명해 점수를 이관한다.
-     * ponytail: 유저 발화가 직렬이라 "진짜행+임시행 동시존재"는 정상 흐름에서 없다. 생기면
-     * 진짜행을 우선 반환하고 임시행은 고아로 남는다(1주 창 수용, 필요 시 수동 병합).
+     * 신규 생성 시 가입/유입 추적용 new_user 이벤트를 traceId 와 함께 남긴다(임팩트 측정).
      */
-    private fun getOrCreateUser(id: ChatIdentity): User {
-        userRepository.findByAppUserId(id.appUserId)?.let { return it }
-
-        if (id.appUserId != id.botUserKey) {
-            userRepository.findByAppUserId(id.botUserKey)?.let { temp ->
-                temp.appUserId = id.appUserId
+    private fun getOrCreateUser(appUserId: String): User =
+        userRepository.findByAppUserId(appUserId)
+            ?: userRepository.save(User(appUserId = appUserId)).also {
                 log.info(
-                    "evt=appuser_migrated traceId={} from={} to={}",
+                    "evt=new_user traceId={} appUserId={}",
                     MDC.get(TraceKeys.TRACE_ID),
-                    id.botUserKey,
-                    id.appUserId,
+                    appUserId,
                 )
-                return temp
             }
-        }
-
-        return userRepository.save(User(appUserId = id.appUserId)).also {
-            log.info(
-                "evt=new_user traceId={} appUserId={}",
-                MDC.get(TraceKeys.TRACE_ID),
-                id.appUserId,
-            )
-        }
-    }
 
     /** 봇 내 유저 조회, 없으면 생성. UNIQUE(bot_key, bot_user_key) 가 동시성 중복의 최종 방어선. */
     private fun getOrCreateBotUser(user: User, botKey: String, botUserKey: String): BotUser =

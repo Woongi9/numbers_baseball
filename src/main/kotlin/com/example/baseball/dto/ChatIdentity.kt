@@ -24,13 +24,11 @@ data class ChatIdentity(
     companion object {
         private val log = LoggerFactory.getLogger(ChatIdentity::class.java)
 
+        /** @throws MissingAppUserIdException appUserId 가 요청에 없을 때 */
         fun from(request: SkillRequest): ChatIdentity {
             val user = request.userRequest.user
+            val appUserId = user.properties?.appUserId ?: throw MissingAppUserIdException()
             val botUserKey = user.properties?.botUserKey ?: fallback("botUserKey", user.id)
-            // temp: 비즈니스 인증 전이라 appUserId 가 안 온다. 단일 봇이라 botUserKey 가 사실상
-            // 안정적 전역 키다. 인증 완료 후 UserService 가 임시행을 진짜 appUserId 로 개명한다.
-            // 설계·revert 계획: docs/2026-07-23-botuserkey-temp-identity-design.md
-            val appUserId = user.properties?.appUserId ?: botUserKey
             val botKey = request.userRequest.chat?.properties?.botGroupKey
                 ?: fallback("botKey", botUserKey)
 
